@@ -1,0 +1,621 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    Alert,
+    FlatList,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { Colors } from '../constants/Colors';
+import { StockManager } from '../utils/stockManager';
+import { Storage, STORAGE_KEYS } from '../utils/storage';
+
+interface Item {
+  id: string;
+  productName: string;
+  category: 'Primary' | 'Kirana';
+  purchasePrice: number;
+  salePrice: number;
+  openingStock: number; // in bags
+  asOfDate: string;
+  lowStockAlert: number; // in bags
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface SelectedItem {
+  id: string;
+  productName: string;
+  weightKg: number;
+  pricePerKg: number;
+  totalPrice: number;
+}
+
+// Mode to determine if this is for sales or purchase
+type ItemMode = 'sales' | 'purchase';
+
+export default function AddItemsScreen() {
+  const [items, setItems] = useState<Item[]>([]);
+  const [filteredItems, setFilteredItems] = useState<Item[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
+  const [itemMode, setItemMode] = useState<ItemMode>('sales'); // Default to sales mode
+
+  useEffect(() => {
+    loadItems();
+    // Check if we're coming from purchase screen
+    const checkMode = async () => {
+      try {
+        const mode = await Storage.getObject<ItemMode>('ITEM_SELECTION_MODE');
+        if (mode) {
+          setItemMode(mode);
+          // Clear the mode after reading
+          await Storage.removeItem('ITEM_SELECTION_MODE');
+        }
+      } catch (error) {
+        console.error('Error checking item mode:', error);
+      }
+    };
+    checkMode();
+  }, []);
+
+  useEffect(() => {
+    filterItems();
+  }, [items, searchQuery]);
+
+  // Reload items when screen comes into focus to reflect stock updates
+  useFocusEffect(
+    useCallback(() => {
+      loadItems();
+    }, [])
+  );
+
+  const loadItems = async () => {
+    try {
+      const itemsData = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
+      if (itemsData) {
+        setItems(itemsData);
+      }
+    } catch (error) {
+      console.error('Error loading items:', error);
+    }
+  };
+
+  const filterItems = () => {
+    if (!searchQuery.trim()) {
+      setFilteredItems([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    const filtered = items.filter(item =>
+      item.productName.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    setFilteredItems(filtered);
+    setShowDropdown(filtered.length > 0);
+  };
+
+  const selectItem = (item: Item) => {
+    // Check if item is already selected
+    const isAlreadySelected = selectedItems.find(selected => selected.id === item.id);
+    if (isAlreadySelected) {
+      Alert.alert('Item Already Selected', 'This item is already in your selection.');
+      return;
+    }
+
+    // For sales mode, check if item has stock available
+    if (itemMode === 'sales') {
+      const availableStockKg = item.openingStock * 30; // Convert bags to kg
+      if (availableStockKg <= 0) {
+        Alert.alert('Out of Stock', `${item.productName} is currently out of stock.`);
+        return;
+      }
+    }
+
+    // Price per kg depends on mode
+    const pricePerKg = itemMode === 'sales' ? item.salePrice : item.purchasePrice;
+
+    const newSelectedItem: SelectedItem = {
+      id: item.id,
+      productName: item.productName,
+      weightKg: 0, // Default weight, user will input
+      pricePerKg: pricePerKg,
+      totalPrice: 0,
+    };
+
+    setSelectedItems(prev => [...prev, newSelectedItem]);
+    setSearchQuery('');
+    setShowDropdown(false);
+  };
+
+  const updateSelectedItemWeight = (itemId: string, weightKg: string) => {
+    const weight = parseFloat(weightKg) || 0;
+    
+    // For sales mode, check stock availability
+    if (itemMode === 'sales') {
+      const selectedItem = selectedItems.find(item => item.id === itemId);
+      if (selectedItem) {
+        const originalItem = items.find(item => item.id === itemId);
+        if (originalItem) {
+          const availableStockKg = originalItem.openingStock * 30; // Convert bags to kg
+          
+          if (weight > availableStockKg) {
+            Alert.alert('Insufficient Stock', 
+              `${selectedItem.productName} only has ${availableStockKg.toFixed(2)} kg available. You cannot sell more than available stock.`);
+            return;
+          }
+        }
+      }
+    }
+    
+    setSelectedItems(prev =>
+      prev.map(item =>
+        item.id === itemId
+          ? { ...item, weightKg: weight, totalPrice: weight * item.pricePerKg }
+          : item
+      )
+    );
+  };
+
+  const removeSelectedItem = (itemId: string) => {
+    setSelectedItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  const addItemsToBill = async () => {
+    if (selectedItems.length === 0) {
+      Alert.alert('No Items Selected', 'Please select at least one item.');
+      return;
+    }
+
+    // Check if all items have weight
+    const itemsWithoutWeight = selectedItems.filter(item => item.weightKg <= 0);
+    if (itemsWithoutWeight.length > 0) {
+      Alert.alert('Missing Weight', 'Please enter weight for all selected items.');
+      return;
+    }
+
+    // Convert selected items to the format expected by sales/purchase
+    const billItems = selectedItems.map(item => ({
+      id: item.id,
+      itemName: item.productName,
+      quantity: item.weightKg,
+      rate: item.pricePerKg,
+      total: item.totalPrice,
+    }));
+
+    // Store selected items temporarily in storage
+    try {
+      // Check if we're editing an existing invoice
+      const editingInvoiceId = await Storage.getObject('EDITING_INVOICE_ID');
+      console.log('Editing invoice ID:', editingInvoiceId);
+      let storageKey;
+      
+      if (editingInvoiceId) {
+        // We're editing an invoice, use a different key
+        storageKey = itemMode === 'sales' ? 'TEMP_EDIT_INVOICE_ITEMS' : 'TEMP_EDIT_PURCHASE_ITEMS';
+        console.log('Using storage key for editing:', storageKey);
+        // Clear the editing flag
+        await Storage.removeItem('EDITING_INVOICE_ID');
+      } else {
+        // We're creating a new invoice
+        storageKey = itemMode === 'sales' ? 'TEMP_SELECTED_ITEMS' : 'TEMP_PURCHASE_ITEMS';
+        console.log('Using storage key for new invoice:', storageKey);
+      }
+      
+      console.log('Storing bill items:', billItems);
+      await Storage.setObject(storageKey, billItems);
+      console.log('Successfully stored items with key:', storageKey);
+      
+      // Update stock levels immediately based on mode
+      if (itemMode === 'sales') {
+        await StockManager.updateStockOnSale(billItems);
+      } else {
+        await StockManager.updateStockOnPurchase(billItems);
+      }
+      
+      // Reload items to reflect updated stock
+      await loadItems();
+      
+      // Small delay to ensure storage is properly set before navigation
+      setTimeout(() => {
+        router.back();
+      }, 100);
+    } catch (error) {
+      console.error('Error storing selected items:', error);
+      Alert.alert('Error', 'Failed to add items. Please try again.');
+    }
+  };
+
+  // Calculate total amount
+  const totalAmount = selectedItems.reduce((sum, item) => sum + item.totalPrice, 0);
+
+  const renderDropdownItem = ({ item }: { item: Item }) => (
+    <TouchableOpacity
+      style={styles.dropdownItem}
+      onPress={() => selectItem(item)}
+    >
+      <View style={styles.dropdownItemContent}>
+        <Text style={styles.dropdownItemName}>{item.productName}</Text>
+        <Text style={styles.dropdownItemStock}>
+          {itemMode === 'sales' 
+            ? `Stock: ${item.openingStock.toFixed(2)} bags (${Math.round(item.openingStock * 30)} kg)`
+            : `Price: ₹${item.purchasePrice}/kg`
+          }
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderSelectedItem = ({ item }: { item: SelectedItem }) => (
+    <View style={styles.selectedItemCard}>
+      <View style={styles.selectedItemHeader}>
+        <Text style={styles.selectedItemName}>{item.productName}</Text>
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={() => removeSelectedItem(item.id)}
+        >
+          <Ionicons name="close-circle" size={20} color={Colors.error} />
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.selectedItemDetails}>
+        <View style={styles.inputRow}>
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Weight (kg)</Text>
+            <TextInput
+              style={styles.weightInput}
+              placeholder="Enter weight..."
+              placeholderTextColor={Colors.textTertiary}
+              value={item.weightKg > 0 ? item.weightKg.toString() : ''}
+              onChangeText={(text) => updateSelectedItemWeight(item.id, text)}
+              keyboardType="numeric"
+            />
+          </View>
+          
+          <View style={styles.priceContainer}>
+            <Text style={styles.inputLabel}>Price (₹/kg)</Text>
+            <Text style={styles.priceValue}>₹{item.pricePerKg.toFixed(2)}</Text>
+          </View>
+        </View>
+        
+        {item.weightKg > 0 && (
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total:</Text>
+            <Text style={styles.totalValue}>₹{item.totalPrice.toFixed(2)}</Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {itemMode === 'sales' ? 'Select Items for Sale' : 'Select Items for Purchase'}
+        </Text>
+        <View style={styles.placeholder} />
+      </View>
+      
+      <View style={styles.content}>
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={20} color={Colors.textTertiary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search products..."
+              placeholderTextColor={Colors.textTertiary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onFocus={() => {
+                if (searchQuery.trim() && filteredItems.length > 0) {
+                  setShowDropdown(true);
+                }
+              }}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => {
+                setSearchQuery('');
+                setShowDropdown(false);
+              }}>
+                <Ionicons name="close-circle" size={20} color={Colors.textTertiary} />
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          {/* Dropdown */}
+          {showDropdown && (
+            <View style={styles.dropdown}>
+              <FlatList
+                data={filteredItems}
+                renderItem={renderDropdownItem}
+                keyExtractor={(item) => item.id}
+                style={styles.dropdownList}
+                nestedScrollEnabled={true}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* Selected Items */}
+        <View style={styles.selectedItemsContainer}>
+          <Text style={styles.sectionTitle}>
+            Selected Items ({selectedItems.length})
+          </Text>
+          
+          {selectedItems.length > 0 ? (
+            <FlatList
+              data={selectedItems}
+              renderItem={renderSelectedItem}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              showsVerticalScrollIndicator={false}
+            />
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="cube-outline" size={48} color={Colors.textTertiary} />
+                          <Text style={styles.emptyStateText}>No items selected</Text>
+            <Text style={styles.emptyStateSubtext}>
+              {itemMode === 'sales' 
+                ? 'Search and select items to add to your invoice'
+                : 'Search and select items to add to your purchase bill'
+              }
+            </Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Footer with Total and Add Products Button */}
+      {selectedItems.length > 0 && (
+        <View style={styles.footer}>
+          <View style={styles.totalContainer}>
+            <Text style={styles.footerTotalLabel}>Total Amount:</Text>
+            <Text style={styles.totalAmount}>₹{totalAmount.toFixed(2)}</Text>
+          </View>
+          <TouchableOpacity style={styles.addProductsButton} onPress={addItemsToBill}>
+            <Ionicons name="add-circle" size={24} color={Colors.text} />
+            <Text style={styles.addProductsButtonText}>
+              {itemMode === 'sales' ? 'Add Products' : 'Add Items'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  backButton: {
+    padding: 4,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
+    flex: 1,
+    textAlign: 'center',
+  },
+  placeholder: {
+    width: 32,
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  searchContainer: {
+    marginBottom: 24,
+    zIndex: 1000,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: Colors.text,
+  },
+  dropdown: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    marginTop: 8,
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  dropdownList: {
+    maxHeight: 200,
+  },
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  dropdownItemContent: {
+    gap: 4,
+  },
+  dropdownItemName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.text,
+  },
+  dropdownItemStock: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  selectedItemsContainer: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 16,
+  },
+  selectedItemCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  selectedItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  selectedItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    flex: 1,
+  },
+  removeButton: {
+    padding: 4,
+  },
+  selectedItemDetails: {
+    gap: 12,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  inputContainer: {
+    flex: 1,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+    marginBottom: 6,
+  },
+  weightInput: {
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  priceContainer: {
+    flex: 1,
+  },
+  priceValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.success,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.success,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  footer: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: 16,
+  },
+  totalContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  footerTotalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  totalAmount: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.success,
+  },
+  addProductsButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  addProductsButtonText: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
