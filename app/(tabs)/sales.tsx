@@ -4,11 +4,14 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -16,9 +19,28 @@ import {
   View,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
+import { CloudinaryUploader } from '../../utils/cloudinaryUpload';
 import { CustomerManager } from '../../utils/customerManager';
-import { Storage, STORAGE_KEYS } from '../../utils/storage';
 import { InvoicePdfGenerator } from '../../utils/invoicePdfGenerator';
+import { Storage, STORAGE_KEYS } from '../../utils/storage';
+import { WASenderAPI } from '../../utils/wasenderApi';
+
+// Android-specific utilities
+const isAndroid = Platform.OS === 'android';
+const { width, height } = Dimensions.get('window');
+
+// Android-specific constants
+const ANDROID_CONSTANTS = {
+  statusBarHeight: isAndroid ? StatusBar.currentHeight || 24 : 0,
+  navigationBarHeight: isAndroid ? 48 : 0,
+  touchTargetMinSize: 48, // Android Material Design minimum touch target
+  elevation: {
+    low: isAndroid ? 2 : 0,
+    medium: isAndroid ? 4 : 0,
+    high: isAndroid ? 8 : 0,
+  },
+  rippleColor: isAndroid ? 'rgba(0, 0, 0, 0.1)' : undefined,
+};
 
 interface SaleInvoice {
   id: string;
@@ -245,10 +267,17 @@ export default function SalesScreen() {
     };
 
     // Generate PDF in the background
+    let pdfUri: string | undefined;
     try {
-      const pdfUri = await InvoicePdfGenerator.generateInvoicePDF(newInvoice);
-      if (pdfUri) {
+      const generatedPdfUri = await InvoicePdfGenerator.generateInvoicePDF(newInvoice);
+      if (generatedPdfUri) {
+        pdfUri = generatedPdfUri;
         newInvoice.pdfUri = pdfUri;
+        
+        // Add a small delay to ensure file is fully written
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } else {
+        console.error('PDF generation returned null');
       }
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -268,10 +297,54 @@ export default function SalesScreen() {
       // Trigger balance recalculation
       await Storage.setObject('LAST_TRANSACTION_UPDATE', Date.now().toString());
       
-      Alert.alert('Success', 'Invoice created successfully!');
+      // Send invoice via WhatsApp
+      await sendInvoiceViaWhatsApp(newInvoice, pdfUri);
+      
+      Alert.alert('Success', 'Invoice created and sent successfully!');
     } catch (error) {
       console.error('Error saving invoice:', error);
       Alert.alert('Error', 'Failed to save invoice. Please try again.');
+    }
+  };
+
+  const sendInvoiceViaWhatsApp = async (invoice: SaleInvoice, pdfUri?: string) => {
+    try {
+      // Validate phone number
+      if (!WASenderAPI.validatePhoneNumber(invoice.phoneNumber)) {
+        console.warn('Invalid phone number format:', invoice.phoneNumber);
+        return;
+      }
+
+      const formattedPhone = WASenderAPI.formatPhoneNumber(invoice.phoneNumber);
+      
+      let documentUrl: string | undefined;
+      
+      // Upload PDF to Cloudinary if available
+      if (pdfUri) {
+        const uploadResult = await CloudinaryUploader.uploadInvoicePdf(pdfUri, invoice.invoiceNo);
+        
+        if (uploadResult.success && uploadResult.url) {
+          documentUrl = uploadResult.url;
+        } else {
+          console.error('Failed to upload PDF:', uploadResult.error);
+        }
+      }
+      
+      // Send invoice via WhatsApp (with document if available)
+      const response = await WASenderAPI.sendInvoice(
+        formattedPhone,
+        invoice.customerName,
+        invoice.invoiceNo,
+        invoice.totalAmount,
+        invoice.date,
+        documentUrl // Pass the Cloudinary URL if available
+      );
+      
+      if (!response.success) {
+        console.error('Failed to send WhatsApp invoice:', response.error);
+      }
+    } catch (error) {
+      console.error('Error sending invoice via WhatsApp:', error);
     }
   };
 
@@ -292,6 +365,10 @@ export default function SalesScreen() {
           <TouchableOpacity
             style={styles.removeButton}
             onPress={() => removeInvoiceItem(index)}
+            activeOpacity={isAndroid ? 0.7 : 0.2}
+            {...(isAndroid && {
+              android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+            })}
           >
             <Ionicons name="close-circle" size={20} color={Colors.error} />
           </TouchableOpacity>
@@ -357,9 +434,15 @@ export default function SalesScreen() {
           >
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Create Sale Invoice</Text>
-          <TouchableOpacity onPress={resetForm}>
-            <Ionicons name="close" size={24} color={Colors.text} />
-          </TouchableOpacity>
+                  <TouchableOpacity 
+          onPress={resetForm}
+          activeOpacity={isAndroid ? 0.7 : 0.2}
+          {...(isAndroid && {
+            android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+          })}
+        >
+          <Ionicons name="close" size={24} color={Colors.text} />
+        </TouchableOpacity>
         </View>
         
         <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
@@ -416,15 +499,19 @@ export default function SalesScreen() {
                       <TouchableOpacity
                         key={customer.id}
                         style={styles.suggestionItem}
-                                                  onPress={() => {
-                            setInvoiceForm(prev => ({
-                              ...prev,
-                              customerName: customer.name,
-                              phoneNumber: customer.phoneNumber,
-                            }));
-                            setSelectedCustomerBalance(customer.balance);
-                            setShowCustomerDropdown(false);
-                          }}
+                        onPress={() => {
+                          setInvoiceForm(prev => ({
+                            ...prev,
+                            customerName: customer.name,
+                            phoneNumber: customer.phoneNumber,
+                          }));
+                          setSelectedCustomerBalance(customer.balance);
+                          setShowCustomerDropdown(false);
+                        }}
+                        activeOpacity={isAndroid ? 0.7 : 0.2}
+                        {...(isAndroid && {
+                          android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                        })}
                       >
                         <Text style={styles.suggestionName}>{customer.name}</Text>
                         <Text style={[
@@ -451,6 +538,10 @@ export default function SalesScreen() {
                             setSelectedCustomerBalance(customer.balance);
                             setShowCustomerDropdown(false);
                           }}
+                          activeOpacity={isAndroid ? 0.7 : 0.2}
+                          {...(isAndroid && {
+                            android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                          })}
                         >
                           <Text style={styles.suggestionName}>{customer.name}</Text>
                           <Text style={[
@@ -481,15 +572,22 @@ export default function SalesScreen() {
           <View style={styles.formSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Items</Text>
-              <TouchableOpacity style={styles.addItemsButton} onPress={() => {
-                setShowInvoiceModal(false);
-                // Set mode for sales items
-                Storage.setObject('ITEM_SELECTION_MODE', 'sales');
-                // Small delay to ensure modal closes before navigation
-                setTimeout(() => {
-                  router.push('/add-items');
-                }, 100);
-              }}>
+              <TouchableOpacity 
+                style={styles.addItemsButton} 
+                onPress={() => {
+                  setShowInvoiceModal(false);
+                  // Set mode for sales items
+                  Storage.setObject('ITEM_SELECTION_MODE', 'sales');
+                  // Small delay to ensure modal closes before navigation
+                  setTimeout(() => {
+                    router.push('/add-items');
+                  }, 100);
+                }}
+                activeOpacity={isAndroid ? 0.7 : 0.2}
+                {...(isAndroid && {
+                  android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                })}
+              >
                 <Ionicons name="add" size={20} color={Colors.text} />
                 <Text style={styles.addItemsButtonText}>Add Items</Text>
               </TouchableOpacity>
@@ -512,10 +610,24 @@ export default function SalesScreen() {
         </ScrollView>
         
         <View style={styles.modalFooter}>
-          <TouchableOpacity style={styles.cancelButton} onPress={resetForm}>
+          <TouchableOpacity 
+            style={styles.cancelButton} 
+            onPress={resetForm}
+            activeOpacity={isAndroid ? 0.7 : 0.2}
+            {...(isAndroid && {
+              android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+            })}
+          >
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.createButton} onPress={handleCreateInvoice}>
+          <TouchableOpacity 
+            style={styles.createButton} 
+            onPress={handleCreateInvoice}
+            activeOpacity={isAndroid ? 0.7 : 0.2}
+            {...(isAndroid && {
+              android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+            })}
+          >
             <Text style={styles.createButtonText}>Create Invoice</Text>
           </TouchableOpacity>
         </View>
@@ -531,7 +643,15 @@ export default function SalesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        // Android-specific: Optimize scrolling
+        {...(isAndroid && {
+          overScrollMode: 'never',
+          nestedScrollEnabled: true,
+        })}
+      >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.companyName}>Sales</Text>
@@ -539,13 +659,24 @@ export default function SalesScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => setShowInvoiceModal(true)}>
-            <Ionicons name="add" size={20} color={Colors.text} />
-            <Text style={styles.primaryButtonText}>New Invoice</Text>
-          </TouchableOpacity>
+                  <TouchableOpacity 
+          style={styles.primaryButton} 
+          onPress={() => setShowInvoiceModal(true)}
+          activeOpacity={isAndroid ? 0.7 : 0.2}
+          {...(isAndroid && {
+            android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+          })}
+        >
+          <Ionicons name="add" size={20} color={Colors.text} />
+          <Text style={styles.primaryButtonText}>New Invoice</Text>
+        </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.primaryButton, { backgroundColor: Colors.success }]} 
             onPress={() => router.push('/payment-in')}
+            activeOpacity={isAndroid ? 0.7 : 0.2}
+            {...(isAndroid && {
+              android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+            })}
           >
             <Ionicons name="arrow-down-circle" size={20} color={Colors.text} />
             <Text style={styles.primaryButtonText}>Payment In</Text>
@@ -561,6 +692,10 @@ export default function SalesScreen() {
                   key={invoice.id} 
                   style={styles.listItem}
                   onPress={() => router.push(`/edit-invoice?invoiceId=${invoice.id}`)}
+                  activeOpacity={isAndroid ? 0.7 : 0.2}
+                  {...(isAndroid && {
+                    android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                  })}
                 >
                   <View style={styles.listItemHeader}>
                     <Text style={styles.listItemTitle}>#{invoice.invoiceNo}</Text>
@@ -594,10 +729,15 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    // Android-specific: Optimize scrolling performance
+    ...(isAndroid && {
+      overScrollMode: 'never',
+      nestedScrollEnabled: true,
+    }),
   },
   header: {
     padding: 20,
-    paddingTop: 10,
+    paddingTop: isAndroid ? 60 : 20, // Increased padding for Android status bar
   },
 
   companyName: {
@@ -668,6 +808,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     gap: 8,
+    // Android-specific: Add elevation and ensure minimum touch target
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.medium,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    }),
   },
   primaryButtonText: {
     color: Colors.text,
@@ -688,6 +837,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    // Android-specific: Add elevation for Material Design
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   listItemHeader: {
     flexDirection: 'row',
@@ -776,6 +933,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 4,
+    // Android-specific: Add elevation and ensure minimum touch target
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.medium,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    }),
   },
   addItemsButtonText: {
     color: Colors.text,
@@ -790,6 +956,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: Colors.text,
     fontSize: 16,
+    // Android-specific: Optimize text input
+    ...(isAndroid && {
+      textAlignVertical: 'center',
+      includeFontPadding: false,
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   invoiceItemContainer: {
     backgroundColor: Colors.surface,
@@ -805,6 +981,11 @@ const styles = StyleSheet.create({
 
   removeButton: {
     padding: 4,
+    // Android-specific: Ensure minimum touch target
+    minWidth: ANDROID_CONSTANTS.touchTargetMinSize,
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   invoiceItemDetails: {
     flexDirection: 'row',
@@ -856,6 +1037,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    // Android-specific: Ensure minimum touch target
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
   },
   cancelButtonText: {
     color: Colors.text,
@@ -868,6 +1052,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    // Android-specific: Add elevation and ensure minimum touch target
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.medium,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    }),
   },
   createButtonText: {
     color: Colors.text,
@@ -919,11 +1113,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     zIndex: 1000,
     maxHeight: 250,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    // Android-specific: Enhanced elevation for dropdown
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.high,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 6,
+    }),
   },
   suggestionsScrollView: {
     maxHeight: 144, // Height for exactly 3 items (48px each)
@@ -935,6 +1132,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    // Android-specific: Ensure minimum touch target
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
   },
   suggestionName: {
     fontSize: 14,
@@ -985,5 +1184,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     flex: 1,
+    // Android-specific: Add elevation for modal
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.high,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    }),
   },
 });

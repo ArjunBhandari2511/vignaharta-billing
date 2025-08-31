@@ -194,24 +194,19 @@ export default function AddItemsScreen() {
     try {
       // Check if we're editing an existing invoice
       const editingInvoiceId = await Storage.getObject('EDITING_INVOICE_ID');
-      console.log('Editing invoice ID:', editingInvoiceId);
       let storageKey;
       
       if (editingInvoiceId) {
         // We're editing an invoice, use a different key
         storageKey = itemMode === 'sales' ? 'TEMP_EDIT_INVOICE_ITEMS' : 'TEMP_EDIT_PURCHASE_ITEMS';
-        console.log('Using storage key for editing:', storageKey);
         // Clear the editing flag
         await Storage.removeItem('EDITING_INVOICE_ID');
       } else {
         // We're creating a new invoice
         storageKey = itemMode === 'sales' ? 'TEMP_SELECTED_ITEMS' : 'TEMP_PURCHASE_ITEMS';
-        console.log('Using storage key for new invoice:', storageKey);
       }
       
-      console.log('Storing bill items:', billItems);
       await Storage.setObject(storageKey, billItems);
-      console.log('Successfully stored items with key:', storageKey);
       
       // Update stock levels immediately based on mode
       if (itemMode === 'sales') {

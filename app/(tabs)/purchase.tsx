@@ -4,11 +4,14 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
+    Dimensions,
     FlatList,
     KeyboardAvoidingView,
     Modal,
+    Platform,
     SafeAreaView,
     ScrollView,
+    StatusBar,
     StyleSheet,
     Text,
     TextInput,
@@ -16,8 +19,28 @@ import {
     View,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
+import { CloudinaryUploader } from '../../utils/cloudinaryUpload';
+import { PurchaseBillPdfGenerator } from '../../utils/purchaseBillPdfGenerator';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
 import { SupplierManager } from '../../utils/supplierManager';
+import { WASenderAPI } from '../../utils/wasenderApi';
+
+// Android-specific utilities
+const isAndroid = Platform.OS === 'android';
+const { width, height } = Dimensions.get('window');
+
+// Android-specific constants
+const ANDROID_CONSTANTS = {
+  statusBarHeight: isAndroid ? StatusBar.currentHeight || 24 : 0,
+  navigationBarHeight: isAndroid ? 48 : 0,
+  touchTargetMinSize: 48, // Android Material Design minimum touch target
+  elevation: {
+    low: isAndroid ? 2 : 0,
+    medium: isAndroid ? 4 : 0,
+    high: isAndroid ? 8 : 0,
+  },
+  rippleColor: isAndroid ? 'rgba(0, 0, 0, 0.1)' : undefined,
+};
 
 interface PurchaseBill {
   id: string;
@@ -28,6 +51,7 @@ interface PurchaseBill {
   totalAmount: number;
   date: string;
   status: 'pending' | 'completed' | 'cancelled';
+  pdfUri?: string; // Store the generated PDF URI
 }
 
 interface PurchaseItem {
@@ -205,36 +229,125 @@ export default function PurchaseScreen() {
       return;
     }
 
+    // Check if this is an existing supplier and get their balance
+    const existingSupplier = suppliers.find(supplier => 
+      supplier.name.toLowerCase() === billForm.supplierName.toLowerCase() &&
+      supplier.phoneNumber === billForm.phoneNumber
+    );
+
+    if (existingSupplier && existingSupplier.balance > 0) {
+      Alert.alert(
+        'Supplier Has Outstanding Balance',
+        `${billForm.supplierName} has an outstanding balance of ₹${existingSupplier.balance.toLocaleString()}. Do you want to proceed with creating this bill?`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Proceed',
+            onPress: () => createBill(),
+          },
+        ]
+      );
+      return;
+    }
+
+    // If no outstanding balance or new supplier, proceed directly
+    createBill();
+  };
+
+  const createBill = async () => {
+    const newBill: PurchaseBill = {
+      id: Date.now().toString(),
+      billNo: generatedBillNo,
+      supplierName: billForm.supplierName,
+      phoneNumber: billForm.phoneNumber,
+      items: billForm.items,
+      totalAmount: calculateBillTotal(),
+      date: new Date().toLocaleDateString(),
+      status: 'pending',
+    };
+
+    // Generate PDF in the background
+    let pdfUri: string | undefined;
     try {
-      const total = calculateBillTotal();
-      
-      const newBill: PurchaseBill = {
-        id: Date.now().toString(),
-        billNo: generatedBillNo,
-        supplierName: billForm.supplierName,
-        phoneNumber: billForm.phoneNumber,
-        items: billForm.items,
-        totalAmount: total,
-        date: new Date().toISOString().split('T')[0],
-        status: 'pending',
-      };
-
-      const updatedBills = [...purchaseBills, newBill];
-      await Storage.setObject(STORAGE_KEYS.PURCHASE_BILLS, updatedBills);
-      setPurchaseBills(updatedBills);
-
-      // Reset form
-      setBillForm({
-        supplierName: '',
-        phoneNumber: '',
-        items: [],
-      });
-      setShowBillModal(false);
-      setSelectedSupplierBalance(null);
-
-      Alert.alert('Success', 'Purchase bill created successfully!');
+      const generatedPdfUri = await PurchaseBillPdfGenerator.generatePurchaseBillPDF(newBill);
+      if (generatedPdfUri) {
+        pdfUri = generatedPdfUri;
+        newBill.pdfUri = pdfUri;
+        
+        // Add a small delay to ensure file is fully written
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } else {
+        console.error('PDF generation returned null');
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to create purchase bill. Please try again.');
+      console.error('Error generating PDF:', error);
+      // Continue with bill creation even if PDF generation fails
+    }
+
+    const updatedBills = [...purchaseBills, newBill];
+    setPurchaseBills(updatedBills);
+    
+    // Reset form
+    resetForm();
+    
+    // Save to storage with updated data
+    try {
+      await Storage.setObject(STORAGE_KEYS.PURCHASE_BILLS, updatedBills);
+      
+      // Trigger balance recalculation
+      await Storage.setObject('LAST_TRANSACTION_UPDATE', Date.now().toString());
+      
+      // Send bill via WhatsApp
+      await sendBillViaWhatsApp(newBill, pdfUri);
+      
+      Alert.alert('Success', 'Purchase bill created and sent to supplier via WhatsApp!');
+    } catch (error) {
+      console.error('Error saving bill:', error);
+      Alert.alert('Error', 'Failed to save purchase bill. Please try again.');
+    }
+  };
+
+  const sendBillViaWhatsApp = async (bill: PurchaseBill, pdfUri?: string) => {
+    try {
+      // Validate phone number
+      if (!WASenderAPI.validatePhoneNumber(bill.phoneNumber)) {
+        console.warn('Invalid phone number format:', bill.phoneNumber);
+        return;
+      }
+
+      const formattedPhone = WASenderAPI.formatPhoneNumber(bill.phoneNumber);
+      
+      let documentUrl: string | undefined;
+      
+      // Upload PDF to Cloudinary if available
+      if (pdfUri) {
+        const uploadResult = await CloudinaryUploader.uploadPurchaseBillPdf(pdfUri, bill.billNo);
+        
+        if (uploadResult.success && uploadResult.url) {
+          documentUrl = uploadResult.url;
+        } else {
+          console.error('Failed to upload PDF:', uploadResult.error);
+        }
+      }
+      
+      // Send bill via WhatsApp (with document if available)
+      const response = await WASenderAPI.sendPurchaseBill(
+        formattedPhone,
+        bill.supplierName,
+        bill.billNo,
+        bill.totalAmount,
+        bill.date,
+        documentUrl // Pass the Cloudinary URL if available
+      );
+      
+      if (!response.success) {
+        console.error('Failed to send WhatsApp bill:', response.error);
+      }
+    } catch (error) {
+      console.error('Error sending bill via WhatsApp:', error);
     }
   };
 
@@ -309,7 +422,7 @@ export default function PurchaseScreen() {
         keyboardVerticalOffset={100}
       >
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Purchase Bill</Text>
+          <Text style={styles.modalTitle}>Create Purchase Bill</Text>
           <TouchableOpacity onPress={resetForm}>
             <Ionicons name="close" size={24} color={Colors.text} />
           </TouchableOpacity>
@@ -435,7 +548,7 @@ export default function PurchaseScreen() {
               <Text style={styles.sectionTitle}>Items</Text>
               <TouchableOpacity style={styles.addItemsButton} onPress={addBillItem}>
                 <Ionicons name="add" size={20} color={Colors.text} />
-                <Text style={styles.addItemsButtonText}>Add Item</Text>
+                <Text style={styles.addItemsButtonText}>Add Items</Text>
               </TouchableOpacity>
             </View>
             
@@ -469,7 +582,15 @@ export default function PurchaseScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        // Android-specific: Optimize scrolling
+        {...(isAndroid && {
+          overScrollMode: 'never',
+          nestedScrollEnabled: true,
+        })}
+      >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.companyName}>Purchases</Text>
@@ -477,13 +598,24 @@ export default function PurchaseScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => setShowBillModal(true)}>
-            <Ionicons name="add" size={20} color={Colors.text} />
-            <Text style={styles.primaryButtonText}>New Bill</Text>
-          </TouchableOpacity>
+                  <TouchableOpacity 
+          style={styles.primaryButton} 
+          onPress={() => setShowBillModal(true)}
+          activeOpacity={isAndroid ? 0.7 : 0.2}
+          {...(isAndroid && {
+            android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+          })}
+        >
+          <Ionicons name="add" size={20} color={Colors.text} />
+          <Text style={styles.primaryButtonText}>New Bill</Text>
+        </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.primaryButton, { backgroundColor: Colors.error }]} 
             onPress={() => router.push('/payment-out')}
+            activeOpacity={isAndroid ? 0.7 : 0.2}
+            {...(isAndroid && {
+              android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+            })}
           >
             <Ionicons name="arrow-up-circle" size={20} color={Colors.text} />
             <Text style={styles.primaryButtonText}>Payment Out</Text>
@@ -497,7 +629,15 @@ export default function PurchaseScreen() {
           <Text style={styles.sectionTitle}>Recent Bills</Text>
           {purchaseBills.length > 0 ? (
             purchaseBills.slice(0, 10).map((bill) => (
-              <TouchableOpacity key={bill.id} style={styles.listItem}>
+              <TouchableOpacity 
+                key={bill.id} 
+                style={styles.listItem}
+                onPress={() => router.push(`/edit-purchase?billId=${bill.id}`)}
+                activeOpacity={isAndroid ? 0.7 : 0.2}
+                {...(isAndroid && {
+                  android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                })}
+              >
                 <View style={styles.listItemHeader}>
                   <Text style={styles.listItemTitle}>#{bill.billNo}</Text>
                   <Text style={styles.listItemAmount}>₹{bill.totalAmount}</Text>
@@ -530,10 +670,15 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    // Android-specific: Optimize scrolling performance
+    ...(isAndroid && {
+      overScrollMode: 'never',
+      nestedScrollEnabled: true,
+    }),
   },
   header: {
     padding: 20,
-    paddingTop: 10,
+    paddingTop: isAndroid ? 60 : 20, // Increased padding for Android status bar
   },
   companyName: {
     fontSize: 24,
@@ -555,6 +700,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     gap: 8,
+    // Android-specific: Add elevation and ensure minimum touch target
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.medium,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    }),
   },
   primaryButtonText: {
     color: Colors.text,
@@ -575,6 +729,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    // Android-specific: Add elevation for Material Design
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   listItemHeader: {
     flexDirection: 'row',
@@ -691,11 +853,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     zIndex: 1000,
     maxHeight: 150,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    // Android-specific: Enhanced elevation for dropdown
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.high,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 6,
+    }),
   },
   suggestionsScrollView: {
     maxHeight: 150,
@@ -707,6 +872,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    // Android-specific: Ensure minimum touch target
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
   },
   suggestionName: {
     fontSize: 14,
@@ -726,6 +893,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 4,
+    // Android-specific: Add elevation and ensure minimum touch target
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.medium,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    }),
   },
   addItemsButtonText: {
     color: Colors.text,
@@ -739,6 +915,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: Colors.text,
     fontSize: 16,
+    // Android-specific: Optimize text input
+    ...(isAndroid && {
+      textAlignVertical: 'center',
+      includeFontPadding: false,
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   fieldLabel: {
     fontSize: 12,
@@ -763,6 +949,11 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     padding: 4,
+    // Android-specific: Ensure minimum touch target
+    minWidth: ANDROID_CONSTANTS.touchTargetMinSize,
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   billItemDetails: {
     flexDirection: 'row',
@@ -816,6 +1007,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    // Android-specific: Ensure minimum touch target
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
   },
   cancelButtonText: {
     color: Colors.text,
@@ -828,6 +1022,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    // Android-specific: Add elevation and ensure minimum touch target
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.medium,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    }),
   },
   createButtonText: {
     color: Colors.text,

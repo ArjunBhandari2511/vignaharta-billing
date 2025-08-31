@@ -75,25 +75,21 @@ export default function EditInvoiceScreen() {
       if (processingItems) return; // Prevent duplicate processing
       
       try {
-        console.log('useEffect checking for TEMP_EDIT_INVOICE_ITEMS...');
         const tempSaleItems = await Storage.getObject('TEMP_EDIT_INVOICE_ITEMS');
-        console.log('useEffect found temp items:', tempSaleItems);
         
-                  if (tempSaleItems && Array.isArray(tempSaleItems) && tempSaleItems.length > 0 && invoice) {
-            setProcessingItems(true); // Set flag to prevent duplicate processing
-            console.log('useEffect processing temp items:', tempSaleItems);
-            
-            // Generate unique IDs for new items to prevent duplicate key issues
-            const itemsWithUniqueIds = tempSaleItems.map(item => ({
-              ...item,
-              id: `${item.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-            }));
-            
-            const updatedInvoice = {
-              ...invoice,
-              items: [...invoice.items, ...itemsWithUniqueIds]
-            };
-          console.log('useEffect updated invoice items:', updatedInvoice.items);
+        if (tempSaleItems && Array.isArray(tempSaleItems) && tempSaleItems.length > 0 && invoice) {
+          setProcessingItems(true); // Set flag to prevent duplicate processing
+          
+          // Generate unique IDs for new items to prevent duplicate key issues
+          const itemsWithUniqueIds = tempSaleItems.map(item => ({
+            ...item,
+            id: `${item.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          }));
+          
+          const updatedInvoice = {
+            ...invoice,
+            items: [...invoice.items, ...itemsWithUniqueIds]
+          };
           setInvoice(updatedInvoice);
           
           // Also update the stored invoice data immediately
@@ -103,7 +99,6 @@ export default function EditInvoiceScreen() {
               inv.id === invoiceId ? updatedInvoice : inv
             );
             await Storage.setObject(STORAGE_KEYS.SALES_INVOICES, updatedInvoices);
-            console.log('useEffect updated stored invoices');
           }
           
           // Show success message
@@ -111,7 +106,6 @@ export default function EditInvoiceScreen() {
           
           // Clear the temporary storage to prevent duplicate processing
           await Storage.removeItem('TEMP_EDIT_INVOICE_ITEMS');
-          console.log('useEffect cleared TEMP_EDIT_INVOICE_ITEMS');
           
           setProcessingItems(false); // Reset flag
         }
@@ -134,18 +128,14 @@ export default function EditInvoiceScreen() {
   // Handle incoming selected items from add-items screen
   useFocusEffect(
     useCallback(() => {
-      console.log('useFocusEffect triggered in edit-invoice.tsx');
       const handleIncomingItems = async () => {
         if (processingItems) return; // Prevent duplicate processing
         
         try {
-          console.log('Checking for TEMP_EDIT_INVOICE_ITEMS...');
           const tempSaleItems = await Storage.getObject('TEMP_EDIT_INVOICE_ITEMS');
-          console.log('Found temp items:', tempSaleItems);
           
           if (tempSaleItems && Array.isArray(tempSaleItems) && tempSaleItems.length > 0) {
             setProcessingItems(true); // Set flag to prevent duplicate processing
-            console.log('Processing temp items:', tempSaleItems);
             
             // Add the selected items to the current invoice
             if (invoice) {
@@ -159,7 +149,6 @@ export default function EditInvoiceScreen() {
                 ...invoice,
                 items: [...invoice.items, ...itemsWithUniqueIds]
               };
-              console.log('Updated invoice items:', updatedInvoice.items);
               setInvoice(updatedInvoice);
               
               // Also update the stored invoice data immediately
@@ -169,22 +158,16 @@ export default function EditInvoiceScreen() {
                   inv.id === invoiceId ? updatedInvoice : inv
                 );
                 await Storage.setObject(STORAGE_KEYS.SALES_INVOICES, updatedInvoices);
-                console.log('Updated stored invoices');
               }
               
               // Show success message
               Alert.alert('Items Added', `${tempSaleItems.length} items have been added to your invoice.`);
-            } else {
-              console.log('No invoice found, cannot add items');
             }
             
             // Clear the temporary storage to prevent duplicate processing
             await Storage.removeItem('TEMP_EDIT_INVOICE_ITEMS');
-            console.log('Cleared TEMP_EDIT_INVOICE_ITEMS');
             
             setProcessingItems(false); // Reset flag
-          } else {
-            console.log('No temp items found or invalid format');
           }
         } catch (error) {
           console.error('Error handling incoming items:', error);
@@ -233,7 +216,6 @@ export default function EditInvoiceScreen() {
       // Also check for incoming items
       const tempSaleItems = await Storage.getObject('TEMP_EDIT_INVOICE_ITEMS');
       if (tempSaleItems && Array.isArray(tempSaleItems) && tempSaleItems.length > 0 && invoice) {
-        console.log('Refresh found temp items:', tempSaleItems);
         
         // Generate unique IDs for new items to prevent duplicate key issues
         const itemsWithUniqueIds = tempSaleItems.map(item => ({

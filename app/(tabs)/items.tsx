@@ -1,21 +1,41 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
 import {
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Dimensions,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
+
+// Android-specific utilities
+const isAndroid = Platform.OS === 'android';
+const { width, height } = Dimensions.get('window');
+
+// Android-specific constants
+const ANDROID_CONSTANTS = {
+  statusBarHeight: isAndroid ? StatusBar.currentHeight || 24 : 0,
+  navigationBarHeight: isAndroid ? 48 : 0,
+  touchTargetMinSize: 48, // Android Material Design minimum touch target
+  elevation: {
+    low: isAndroid ? 2 : 0,
+    medium: isAndroid ? 4 : 0,
+    high: isAndroid ? 8 : 0,
+  },
+  rippleColor: isAndroid ? 'rgba(0, 0, 0, 0.1)' : undefined,
+};
 
 interface Item {
   id: string;
@@ -542,7 +562,15 @@ export default function ItemsScreen() {
         <Text style={styles.headerTitle}>Items</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        // Android-specific: Optimize scrolling
+        {...(isAndroid && {
+          overScrollMode: 'never',
+          nestedScrollEnabled: true,
+        })}
+      >
                  {/* Header Stats */}
          <View style={styles.headerStats}>
            <View style={styles.statCard}>
@@ -572,6 +600,10 @@ export default function ItemsScreen() {
                   [{ text: 'OK', style: 'default' }]
                 );
               }}
+              activeOpacity={isAndroid ? 0.7 : 0.2}
+              {...(isAndroid && {
+                android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+              })}
             >
               <Ionicons name="warning" size={20} color={Colors.error} />
               <Text style={styles.lowStockAlertText}>
@@ -665,7 +697,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: isAndroid ? 60 : 20, // Increased padding for Android status bar
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -675,10 +707,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: Colors.text,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   content: {
     flex: 1,
+    // Android-specific: Optimize scrolling performance
+    ...(isAndroid && {
+      overScrollMode: 'never',
+      nestedScrollEnabled: true,
+    }),
   },
   headerStats: {
     flexDirection: 'row',
@@ -691,6 +728,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    // Android-specific: Add elevation for Material Design
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   statValue: {
     fontSize: 18,
@@ -715,16 +760,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 12,
+    // Android-specific: Add elevation and optimize input
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
      searchInput: {
      flex: 1,
      fontSize: 16,
      color: Colors.text,
+     // Android-specific: Optimize text input
+     ...(isAndroid && {
+       textAlignVertical: 'center',
+       includeFontPadding: false,
+     }),
    },
    filterButton: {
      padding: 8,
      borderRadius: 8,
      backgroundColor: Colors.surface,
+     // Android-specific: Ensure minimum touch target
+     minWidth: ANDROID_CONSTANTS.touchTargetMinSize,
+     minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+     justifyContent: 'center',
+     alignItems: 'center',
    },
    filterButtonActive: {
      backgroundColor: Colors.primary + '20',
@@ -741,6 +804,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    // Android-specific: Add elevation and ensure minimum touch target
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.medium,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    }),
   },
   createButtonText: {
     color: Colors.text,
@@ -761,6 +833,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    // Android-specific: Add elevation for Material Design
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   itemHeader: {
     flexDirection: 'row',
@@ -806,6 +886,11 @@ const styles = StyleSheet.create({
   },
   deleteIcon: {
     padding: 4,
+    // Android-specific: Ensure minimum touch target
+    minWidth: ANDROID_CONSTANTS.touchTargetMinSize,
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   itemStock: {
     fontSize: 12,
@@ -858,6 +943,14 @@ const styles = StyleSheet.create({
      borderTopRightRadius: 20,
      padding: 20,
      maxHeight: '60%',
+     // Android-specific: Add elevation for modal
+     ...(isAndroid && {
+       elevation: ANDROID_CONSTANTS.elevation.high,
+       shadowColor: '#000',
+       shadowOffset: { width: 0, height: -2 },
+       shadowOpacity: 0.25,
+       shadowRadius: 3.84,
+     }),
    },
   modalHeader: {
     flexDirection: 'row',
@@ -893,6 +986,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: Colors.border,
+    // Android-specific: Optimize text input
+    ...(isAndroid && {
+      textAlignVertical: 'center',
+      includeFontPadding: false,
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   helperText: {
     fontSize: 12,
@@ -915,6 +1018,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: 'center',
+    // Android-specific: Ensure minimum touch target
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
   },
   categoryOptionSelected: {
     backgroundColor: Colors.primary,
@@ -941,6 +1047,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: 'center',
+    // Android-specific: Ensure minimum touch target
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
   },
      clearFiltersButton: {
      flex: 1,
@@ -950,6 +1059,9 @@ const styles = StyleSheet.create({
      borderWidth: 1,
      borderColor: Colors.border,
      alignItems: 'center',
+     // Android-specific: Ensure minimum touch target
+     minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+     justifyContent: 'center',
    },
    clearFiltersText: {
      fontSize: 16,
@@ -963,6 +1075,16 @@ const styles = StyleSheet.create({
      borderRadius: 8,
      backgroundColor: Colors.primary,
      alignItems: 'center',
+     // Android-specific: Add elevation and ensure minimum touch target
+     minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+     justifyContent: 'center',
+     ...(isAndroid && {
+       elevation: ANDROID_CONSTANTS.elevation.medium,
+       shadowColor: '#000',
+       shadowOffset: { width: 0, height: 2 },
+       shadowOpacity: 0.25,
+       shadowRadius: 3.84,
+     }),
    },
    applyFiltersText: {
      fontSize: 16,
@@ -973,6 +1095,8 @@ const styles = StyleSheet.create({
      flexDirection: 'row',
      alignItems: 'center',
      paddingVertical: 12,
+     // Android-specific: Ensure minimum touch target
+     minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
    },
    checkbox: {
      width: 24,
@@ -1008,18 +1132,26 @@ const styles = StyleSheet.create({
       fontWeight: '500',
       color: Colors.textSecondary,
     },
-    lowStockAlert: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: Colors.error + '20',
-      borderWidth: 1,
-      borderColor: Colors.error,
-      borderRadius: 12,
-      padding: 16,
-      marginHorizontal: 20,
-      marginBottom: 16,
-      gap: 12,
-    },
+      lowStockAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.error + '20',
+    borderWidth: 1,
+    borderColor: Colors.error,
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    gap: 12,
+    // Android-specific: Add elevation for Material Design
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
+  },
     lowStockAlertText: {
       fontSize: 16,
       fontWeight: '600',

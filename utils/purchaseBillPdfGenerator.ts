@@ -15,18 +15,18 @@ interface CompanyDetails {
   profileImage?: string;
 }
 
-interface SaleInvoice {
+interface PurchaseBill {
   id: string;
-  invoiceNo: string;
-  customerName: string;
+  billNo: string;
+  supplierName: string;
   phoneNumber: string;
-  items: SaleItem[];
+  items: PurchaseItem[];
   totalAmount: number;
   date: string;
   status: 'pending' | 'completed' | 'cancelled';
 }
 
-interface SaleItem {
+interface PurchaseItem {
   id: string;
   itemName: string;
   quantity: number;
@@ -34,7 +34,7 @@ interface SaleItem {
   total: number;
 }
 
-export class InvoicePdfGenerator {
+export class PurchaseBillPdfGenerator {
   private static async getCompanyDetails(): Promise<CompanyDetails | null> {
     try {
       return await Storage.getObject<CompanyDetails>(STORAGE_KEYS.COMPANY_DETAILS);
@@ -44,12 +44,12 @@ export class InvoicePdfGenerator {
     }
   }
 
-  private static generateInvoiceHTML(invoice: SaleInvoice, companyDetails: CompanyDetails | null): string {
+  private static generatePurchaseBillHTML(bill: PurchaseBill, companyDetails: CompanyDetails | null): string {
     const currentDate = new Date().toLocaleDateString('en-IN');
-    const invoiceDate = invoice.date || currentDate;
+    const billDate = bill.date || currentDate;
     
     // Generate items HTML
-    const itemsHTML = invoice.items.map((item, index) => `
+    const itemsHTML = bill.items.map((item, index) => `
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: left;">${index + 1}</td>
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: left;">${item.itemName}</td>
@@ -64,7 +64,7 @@ export class InvoicePdfGenerator {
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Invoice #${invoice.invoiceNo}</title>
+        <title>Purchase Bill #${bill.billNo}</title>
         <style>
           body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -74,7 +74,7 @@ export class InvoicePdfGenerator {
             color: #1f2937;
             line-height: 1.6;
           }
-          .invoice-container {
+          .bill-container {
             max-width: 800px;
             margin: 0 auto;
             background: #ffffff;
@@ -83,7 +83,7 @@ export class InvoicePdfGenerator {
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
           }
           .header {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
             color: white;
             padding: 30px;
             text-align: center;
@@ -98,12 +98,12 @@ export class InvoicePdfGenerator {
             opacity: 0.9;
             margin-bottom: 20px;
           }
-          .invoice-title {
+          .bill-title {
             font-size: 24px;
             font-weight: bold;
             margin-bottom: 10px;
           }
-          .invoice-number {
+          .bill-number {
             font-size: 18px;
             opacity: 0.9;
           }
@@ -124,9 +124,9 @@ export class InvoicePdfGenerator {
           .info-title {
             font-size: 16px;
             font-weight: bold;
-            color: #6366f1;
+            color: #dc2626;
             margin-bottom: 10px;
-            border-bottom: 2px solid #6366f1;
+            border-bottom: 2px solid #dc2626;
             padding-bottom: 5px;
           }
           .info-item {
@@ -149,7 +149,7 @@ export class InvoicePdfGenerator {
             overflow: hidden;
           }
           .table-header {
-            background: #6366f1;
+            background: #dc2626;
             color: white;
           }
           .table-header th {
@@ -191,7 +191,7 @@ export class InvoicePdfGenerator {
           .grand-total {
             font-size: 20px;
             font-weight: bold;
-            color: #6366f1;
+            color: #dc2626;
             border-top: 2px solid #e5e7eb;
             padding-top: 10px;
             margin-top: 10px;
@@ -246,7 +246,7 @@ export class InvoicePdfGenerator {
             left: 50%;
             transform: translate(-50%, -50%) rotate(-45deg);
             font-size: 48px;
-            color: rgba(99, 102, 241, 0.1);
+            color: rgba(220, 38, 38, 0.1);
             font-weight: bold;
             pointer-events: none;
             z-index: -1;
@@ -254,36 +254,35 @@ export class InvoicePdfGenerator {
         </style>
       </head>
       <body>
-        <div class="watermark">${companyDetails?.businessName || 'INVOICE'}</div>
-        <div class="invoice-container">
+        <div class="watermark">${companyDetails?.businessName || 'PURCHASE BILL'}</div>
+        <div class="bill-container">
           <div class="header">
             <div class="company-name">${companyDetails?.businessName || 'Your Business Name'}</div>
             <div class="company-description">${companyDetails?.businessDescription || 'Business Description'}</div>
-            <div class="invoice-title">TAX INVOICE</div>
-            <div class="invoice-number">Invoice #${invoice.invoiceNo}</div>
+            <div class="bill-title">PURCHASE BILL</div>
+            <div class="bill-number">Bill #${bill.billNo}</div>
           </div>
           
           <div class="content">
             <div class="info-section">
               <div class="info-block">
-                <div class="info-title">Bill To</div>
+                <div class="info-title">Bill From</div>
                 <div class="info-item">
-                  <span class="info-label">Name:</span>
-                  <span class="info-value">${invoice.customerName}</span>
+                  <span class="info-label">Supplier:</span>
+                  <span class="info-value">${bill.supplierName}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-label">Phone:</span>
-                  <span class="info-value">${invoice.phoneNumber}</span>
+                  <span class="info-value">${bill.phoneNumber}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-label">Date:</span>
-                  <span class="info-value">${invoiceDate}</span>
+                  <span class="info-value">${billDate}</span>
                 </div>
-
               </div>
               
               <div class="info-block">
-                <div class="info-title">From</div>
+                <div class="info-title">Bill To</div>
                 <div class="info-item">
                   <span class="info-label">Business:</span>
                   <span class="info-value">${companyDetails?.businessName || 'Your Business Name'}</span>
@@ -325,11 +324,11 @@ export class InvoicePdfGenerator {
             <div class="total-section">
               <div class="total-row">
                 <span class="total-label">Total Amount:</span>
-                <span class="total-amount">₹${invoice.totalAmount.toLocaleString()}</span>
+                <span class="total-amount">₹${bill.totalAmount.toLocaleString()}</span>
               </div>
               <div class="total-row grand-total">
                 <span class="total-label">Grand Total:</span>
-                <span class="total-amount">₹${invoice.totalAmount.toLocaleString()}</span>
+                <span class="total-amount">₹${bill.totalAmount.toLocaleString()}</span>
               </div>
             </div>
             
@@ -343,9 +342,9 @@ export class InvoicePdfGenerator {
               <div class="terms-section">
                 <div class="terms-title">Terms & Conditions</div>
                 <div class="terms-text">
-                  • Payment is due within 30 days of invoice date<br>
-                  • Late payments may incur additional charges<br>
-                  • Goods once sold will not be taken back<br>
+                  • Payment will be made within 30 days of bill date<br>
+                  • Goods received in good condition<br>
+                  • Any defects must be reported within 7 days<br>
                   • Subject to local jurisdiction
                 </div>
               </div>
@@ -359,13 +358,13 @@ export class InvoicePdfGenerator {
     return html;
   }
 
-  static async generateAndShareInvoice(invoice: SaleInvoice): Promise<boolean> {
+  static async generateAndSharePurchaseBill(bill: PurchaseBill): Promise<boolean> {
     try {
       // Get company details
       const companyDetails = await this.getCompanyDetails();
       
       // Generate HTML
-      const html = this.generateInvoiceHTML(invoice, companyDetails);
+      const html = this.generatePurchaseBillHTML(bill, companyDetails);
       
       // Generate PDF
       const { uri } = await Print.printToFileAsync({
@@ -380,7 +379,7 @@ export class InvoicePdfGenerator {
         if (isSharingAvailable) {
           await Sharing.shareAsync(uri, {
             mimeType: 'application/pdf',
-            dialogTitle: `Invoice #${invoice.invoiceNo}`,
+            dialogTitle: `Purchase Bill #${bill.billNo}`,
           });
           return true;
         } else {
@@ -390,18 +389,18 @@ export class InvoicePdfGenerator {
         throw new Error('Failed to generate PDF file');
       }
     } catch (error) {
-      console.error('Error generating and sharing invoice:', error);
+      console.error('Error generating and sharing purchase bill:', error);
       return false;
     }
   }
 
-  static async generateInvoicePDF(invoice: SaleInvoice): Promise<string | null> {
+  static async generatePurchaseBillPDF(bill: PurchaseBill): Promise<string | null> {
     try {
       // Get company details
       const companyDetails = await this.getCompanyDetails();
       
       // Generate HTML
-      const html = this.generateInvoiceHTML(invoice, companyDetails);
+      const html = this.generatePurchaseBillHTML(bill, companyDetails);
       
       // Generate PDF
       const { uri } = await Print.printToFileAsync({
@@ -430,14 +429,14 @@ export class InvoicePdfGenerator {
       
       return uri || null;
     } catch (error) {
-      console.error('Error generating invoice PDF:', error);
+      console.error('Error generating purchase bill PDF:', error);
       return null;
     }
   }
 
-  static async saveInvoiceToDocuments(invoice: SaleInvoice): Promise<string | null> {
+  static async savePurchaseBillToDocuments(bill: PurchaseBill): Promise<string | null> {
     try {
-      const fileUri = await this.generateInvoicePDF(invoice);
+      const fileUri = await this.generatePurchaseBillPDF(bill);
       
       if (fileUri) {
         // Get the documents directory
@@ -446,7 +445,7 @@ export class InvoicePdfGenerator {
           throw new Error('Documents directory not available');
         }
         
-        const fileName = `Invoice_${invoice.invoiceNo}_${Date.now()}.pdf`;
+        const fileName = `PurchaseBill_${bill.billNo}_${Date.now()}.pdf`;
         const destinationUri = `${documentsDir}${fileName}`;
         
         // Copy the file to documents directory
@@ -460,7 +459,7 @@ export class InvoicePdfGenerator {
       
       return null;
     } catch (error) {
-      console.error('Error saving invoice to documents:', error);
+      console.error('Error saving purchase bill to documents:', error);
       return null;
     }
   }

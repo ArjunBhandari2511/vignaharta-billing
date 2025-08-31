@@ -46,6 +46,11 @@ export default function CompanyDetailsScreen() {
   const [signaturePath, setSignaturePath] = useState('');
   const [completionPercentage, setCompletionPercentage] = useState(0);
 
+  // Android-specific constants
+  const isAndroid = Platform.OS === 'android';
+  const statusBarHeight = isAndroid ? 24 : 0;
+  const navBarHeight = isAndroid ? 48 : 0;
+
   useEffect(() => {
     loadCompanyDetails();
   }, []);
@@ -121,7 +126,11 @@ export default function CompanyDetailsScreen() {
       <SafeAreaView style={styles.signatureModalContainer}>
         <View style={styles.signatureModalHeader}>
           <Text style={styles.signatureModalTitle}>Draw Your Signature</Text>
-          <TouchableOpacity onPress={() => setShowSignatureModal(false)}>
+          <TouchableOpacity 
+            style={styles.closeButton}
+            onPress={() => setShowSignatureModal(false)}
+            activeOpacity={0.7}
+          >
             <Ionicons name="close" size={24} color={Colors.text} />
           </TouchableOpacity>
         </View>
@@ -139,6 +148,7 @@ export default function CompanyDetailsScreen() {
           <TouchableOpacity 
             style={styles.signatureSaveButton}
             onPress={() => handleSignatureSave('Digital Signature')}
+            activeOpacity={0.8}
           >
             <Text style={styles.signatureSaveButtonText}>Save Signature</Text>
           </TouchableOpacity>
@@ -153,13 +163,22 @@ export default function CompanyDetailsScreen() {
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <TouchableOpacity 
+              onPress={() => router.back()} 
+              style={styles.backButton}
+              activeOpacity={0.7}
+            >
               <Ionicons name="arrow-back" size={24} color={Colors.text} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Company Details</Text>
+            <View style={styles.backButton} />
           </View>
 
           {/* Profile Section */}
@@ -168,7 +187,10 @@ export default function CompanyDetailsScreen() {
               styles.profileImageContainer,
               completionPercentage > 0 && styles.profileImageContainerWithBorder
             ]}>
-              <TouchableOpacity style={styles.profileImageButton}>
+              <TouchableOpacity 
+                style={styles.profileImageButton}
+                activeOpacity={0.8}
+              >
                 <Ionicons name="camera" size={32} color={Colors.textSecondary} />
                 <Text style={styles.profileImageText}>Add Photo</Text>
               </TouchableOpacity>
@@ -199,6 +221,7 @@ export default function CompanyDetailsScreen() {
                 placeholderTextColor={Colors.textTertiary}
                 value={companyDetails.businessName}
                 onChangeText={(text) => updateField('businessName', text)}
+                autoCapitalize="words"
               />
             </View>
 
@@ -211,6 +234,7 @@ export default function CompanyDetailsScreen() {
                 value={companyDetails.phoneNumber1}
                 onChangeText={(text) => updateField('phoneNumber1', text)}
                 keyboardType="phone-pad"
+                maxLength={15}
               />
             </View>
 
@@ -223,6 +247,7 @@ export default function CompanyDetailsScreen() {
                 value={companyDetails.phoneNumber2}
                 onChangeText={(text) => updateField('phoneNumber2', text)}
                 keyboardType="phone-pad"
+                maxLength={15}
               />
             </View>
 
@@ -236,6 +261,7 @@ export default function CompanyDetailsScreen() {
                 onChangeText={(text) => updateField('emailId', text)}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
               />
             </View>
 
@@ -250,6 +276,7 @@ export default function CompanyDetailsScreen() {
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
+                autoCapitalize="sentences"
               />
             </View>
 
@@ -277,6 +304,7 @@ export default function CompanyDetailsScreen() {
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
+                autoCapitalize="sentences"
               />
             </View>
 
@@ -285,6 +313,7 @@ export default function CompanyDetailsScreen() {
               <TouchableOpacity 
                 style={styles.signatureButton}
                 onPress={() => setShowSignatureModal(true)}
+                activeOpacity={0.8}
               >
                 {companyDetails.signature ? (
                   <View style={styles.signatureDisplay}>
@@ -303,7 +332,11 @@ export default function CompanyDetailsScreen() {
 
           {/* Save Button */}
           <View style={styles.bottomSection}>
-            <TouchableOpacity style={styles.saveButtonLarge} onPress={handleSave}>
+            <TouchableOpacity 
+              style={styles.saveButtonLarge} 
+              onPress={handleSave}
+              activeOpacity={0.8}
+            >
               <Ionicons name="save" size={20} color={Colors.text} />
               <Text style={styles.saveButtonLargeText}>Save Company Details</Text>
             </TouchableOpacity>
@@ -327,30 +360,56 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    paddingTop: 10,
-    position: 'relative',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? 48 : 44,
+    paddingBottom: 20,
+    marginTop: Platform.OS === 'android' ? 16 : 12,
+    backgroundColor: Colors.background,
+    // Android-specific: Add elevation
+    ...(Platform.OS === 'android' && {
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3.84,
+    }),
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: Platform.OS === 'android' ? 20 : 20,
+    fontWeight: Platform.OS === 'android' ? '500' : '600',
     color: Colors.text,
-    position: 'absolute',
-    left: 0,
-    right: 0,
     textAlign: 'center',
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
   backButton: {
-    padding: 8,
-    zIndex: 1,
+    padding: Platform.OS === 'android' ? 12 : 8,
+    minWidth: 48,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    // Android-specific: Add ripple effect area
+    ...(Platform.OS === 'android' && {
+      borderRadius: 24,
+    }),
   },
 
   profileSection: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    backgroundColor: Colors.background,
   },
   profileImageContainer: {
     width: 120,
@@ -359,7 +418,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+    // Android-specific: Add elevation
+    ...(Platform.OS === 'android' && {
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    }),
   },
   profileImageContainerWithBorder: {
     borderWidth: 3,
@@ -367,27 +434,46 @@ const styles = StyleSheet.create({
   },
   profileImageButton: {
     alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 48,
+    minHeight: 48,
   },
   profileImageText: {
-    fontSize: 12,
+    fontSize: Platform.OS === 'android' ? 12 : 12,
     color: Colors.textSecondary,
-    marginTop: 4,
+    marginTop: 8,
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
   completionContainer: {
     alignItems: 'center',
+    width: '100%',
   },
   completionText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: Platform.OS === 'android' ? 16 : 16,
+    fontWeight: Platform.OS === 'android' ? '500' : '600',
     color: Colors.text,
-    marginBottom: 8,
+    marginBottom: 12,
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
   progressBar: {
-    width: 200,
-    height: 8,
+    width: '100%',
+    maxWidth: 280,
+    height: Platform.OS === 'android' ? 8 : 8,
     backgroundColor: Colors.surface,
     borderRadius: 4,
     overflow: 'hidden',
+    // Android-specific: Add elevation
+    ...(Platform.OS === 'android' && {
+      elevation: 1,
+    }),
   },
   progressFill: {
     height: '100%',
@@ -396,42 +482,74 @@ const styles = StyleSheet.create({
   },
   formSection: {
     padding: 20,
+    backgroundColor: Colors.background,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: Platform.OS === 'android' ? 18 : 18,
+    fontWeight: Platform.OS === 'android' ? '500' : '600',
     color: Colors.text,
-    marginBottom: 20,
+    marginBottom: 24,
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
   formGroup: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   fieldLabel: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: Platform.OS === 'android' ? 14 : 14,
+    fontWeight: Platform.OS === 'android' ? '500' : '500',
     color: Colors.text,
     marginBottom: 8,
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
   input: {
     backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: Platform.OS === 'android' ? 8 : 12,
+    padding: Platform.OS === 'android' ? 16 : 16,
     color: Colors.text,
-    fontSize: 16,
+    fontSize: Platform.OS === 'android' ? 16 : 16, // Prevents zoom on Android
     borderWidth: 1,
     borderColor: Colors.border,
+    // Android-specific: Add elevation and optimize
+    ...(Platform.OS === 'android' && {
+      elevation: 1,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
   textArea: {
-    minHeight: 100,
-    paddingTop: 16,
+    minHeight: Platform.OS === 'android' ? 100 : 100,
+    paddingTop: Platform.OS === 'android' ? 16 : 16,
+    textAlignVertical: 'top',
   },
   signatureButton: {
     backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: Platform.OS === 'android' ? 8 : 12,
+    padding: Platform.OS === 'android' ? 16 : 16,
     borderWidth: 1,
     borderColor: Colors.border,
     borderStyle: 'dashed',
+    minHeight: Platform.OS === 'android' ? 56 : 56,
+    justifyContent: 'center',
+    // Android-specific: Add elevation
+    ...(Platform.OS === 'android' && {
+      elevation: 1,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+    }),
   },
   signatureDisplay: {
     flexDirection: 'row',
@@ -440,9 +558,14 @@ const styles = StyleSheet.create({
   },
   signatureDisplayText: {
     color: Colors.success,
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: Platform.OS === 'android' ? 16 : 16,
+    fontWeight: Platform.OS === 'android' ? '500' : '500',
     marginLeft: 8,
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
   signaturePlaceholder: {
     flexDirection: 'row',
@@ -451,26 +574,45 @@ const styles = StyleSheet.create({
   },
   signaturePlaceholderText: {
     color: Colors.textSecondary,
-    fontSize: 16,
+    fontSize: Platform.OS === 'android' ? 16 : 16,
     marginLeft: 8,
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
   bottomSection: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: Platform.OS === 'android' ? 100 : 80,
   },
   saveButtonLarge: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.primary,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: Platform.OS === 'android' ? 8 : 12,
+    padding: Platform.OS === 'android' ? 16 : 16,
+    minHeight: Platform.OS === 'android' ? 56 : 56,
     gap: 8,
+    // Android-specific: Add elevation and Material Design
+    ...(Platform.OS === 'android' && {
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    }),
   },
   saveButtonLargeText: {
     color: Colors.text,
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: Platform.OS === 'android' ? 16 : 16,
+    fontWeight: Platform.OS === 'android' ? '500' : '600',
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
   // Signature Modal Styles
   signatureModalContainer: {
@@ -481,44 +623,102 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: Platform.OS === 'android' ? 20 : 20,
+    paddingTop: Platform.OS === 'android' ? 16 : 20,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    // Android-specific: Add elevation
+    ...(Platform.OS === 'android' && {
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3.84,
+    }),
   },
   signatureModalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: Platform.OS === 'android' ? 18 : 18,
+    fontWeight: Platform.OS === 'android' ? '500' : '600',
     color: Colors.text,
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
+  },
+  closeButton: {
+    padding: Platform.OS === 'android' ? 8 : 8,
+    minWidth: 48,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: Platform.OS === 'android' ? 24 : 0,
   },
   signatureCanvas: {
     flex: 1,
     backgroundColor: Colors.surface,
     margin: 20,
-    borderRadius: 12,
+    borderRadius: Platform.OS === 'android' ? 8 : 12,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    // Android-specific: Add elevation
+    ...(Platform.OS === 'android' && {
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3.84,
+    }),
   },
   signatureNote: {
-    fontSize: 14,
+    fontSize: Platform.OS === 'android' ? 14 : 14,
     color: Colors.textSecondary,
     textAlign: 'center',
     marginTop: 8,
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
   signatureModalFooter: {
-    padding: 20,
+    padding: Platform.OS === 'android' ? 20 : 20,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
+    // Android-specific: Add elevation
+    ...(Platform.OS === 'android' && {
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3.84,
+    }),
   },
   signatureSaveButton: {
     backgroundColor: Colors.primary,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: Platform.OS === 'android' ? 8 : 12,
+    padding: Platform.OS === 'android' ? 16 : 16,
+    minHeight: Platform.OS === 'android' ? 56 : 56,
     alignItems: 'center',
+    justifyContent: 'center',
+    // Android-specific: Add elevation
+    ...(Platform.OS === 'android' && {
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    }),
   },
   signatureSaveButtonText: {
     color: Colors.text,
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: Platform.OS === 'android' ? 16 : 16,
+    fontWeight: Platform.OS === 'android' ? '500' : '600',
+    // Android-specific: Optimize text rendering
+    ...(Platform.OS === 'android' && {
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    }),
   },
 });

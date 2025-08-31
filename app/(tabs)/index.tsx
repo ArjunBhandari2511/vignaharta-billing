@@ -1,14 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
 import * as Sharing from 'expo-sharing';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Dimensions,
   FlatList,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -18,8 +21,26 @@ import {
 import { Colors } from '../../constants/Colors';
 import { CustomerManager } from '../../utils/customerManager';
 import { InvoicePdfGenerator } from '../../utils/invoicePdfGenerator';
+import { PurchaseBillPdfGenerator } from '../../utils/purchaseBillPdfGenerator';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
 import { SupplierManager } from '../../utils/supplierManager';
+
+// Android-specific utilities
+const isAndroid = Platform.OS === 'android';
+const { width, height } = Dimensions.get('window');
+
+// Android-specific constants
+const ANDROID_CONSTANTS = {
+  statusBarHeight: isAndroid ? StatusBar.currentHeight || 24 : 0,
+  navigationBarHeight: isAndroid ? 48 : 0,
+  touchTargetMinSize: 48, // Android Material Design minimum touch target
+  elevation: {
+    low: isAndroid ? 2 : 0,
+    medium: isAndroid ? 4 : 0,
+    high: isAndroid ? 8 : 0,
+  },
+  rippleColor: isAndroid ? 'rgba(0, 0, 0, 0.1)' : undefined,
+};
 
 interface Transaction {
   id: string;
@@ -30,7 +51,7 @@ interface Transaction {
   date: string;
   status: string;
   items?: any[];
-  pdfUri?: string; // For sale invoices
+  pdfUri?: string; // For sale invoices and purchase bills
 }
 
 interface FilterOptions {
@@ -200,6 +221,7 @@ export default function DashboardScreen() {
           date: bill.date || '',
           status: bill.status || 'pending',
           items: bill.items || [],
+          pdfUri: bill.pdfUri || undefined, // Include PDF URI
         });
       });
 
@@ -303,10 +325,10 @@ export default function DashboardScreen() {
 
 
 
-  const shareInvoicePDF = async (transaction: Transaction) => {
+  const sharePDF = async (transaction: Transaction) => {
     try {
       if (!transaction.pdfUri) {
-        Alert.alert('Error', 'PDF not found for this invoice');
+        Alert.alert('Error', 'PDF not found for this document');
         return;
       }
 
@@ -314,14 +336,14 @@ export default function DashboardScreen() {
       if (isSharingAvailable) {
         await Sharing.shareAsync(transaction.pdfUri, {
           mimeType: 'application/pdf',
-          dialogTitle: `Invoice #${transaction.reference}`,
+          dialogTitle: `${transaction.type === 'sale' ? 'Invoice' : 'Purchase Bill'} #${transaction.reference}`,
         });
       } else {
         Alert.alert('Error', 'Sharing not available on this device');
       }
     } catch (error) {
-      console.error('Error sharing invoice PDF:', error);
-      Alert.alert('Error', 'Failed to share invoice PDF');
+      console.error('Error sharing PDF:', error);
+      Alert.alert('Error', 'Failed to share PDF');
     }
   };
 
@@ -342,6 +364,26 @@ export default function DashboardScreen() {
     } catch (error) {
       console.error('Error generating and sharing invoice PDF:', error);
       Alert.alert('Error', 'Failed to generate and share invoice PDF');
+    }
+  };
+
+  const generateAndSharePurchaseBillPDF = async (transaction: Transaction) => {
+    try {
+      // Find the corresponding purchase bill
+      const purchaseBills = await Storage.getObject<any[]>(STORAGE_KEYS.PURCHASE_BILLS);
+      const purchaseBill = purchaseBills?.find(bill => bill.id === transaction.id);
+      
+      if (purchaseBill) {
+        const success = await PurchaseBillPdfGenerator.generateAndSharePurchaseBill(purchaseBill);
+        if (!success) {
+          Alert.alert('Error', 'Failed to generate and share purchase bill PDF');
+        }
+      } else {
+        Alert.alert('Error', 'Purchase bill not found');
+      }
+    } catch (error) {
+      console.error('Error generating and sharing purchase bill PDF:', error);
+      Alert.alert('Error', 'Failed to generate and share purchase bill PDF');
     }
   };
 
@@ -593,7 +635,14 @@ export default function DashboardScreen() {
     checked: boolean;
     onToggle: () => void;
   }) => (
-    <TouchableOpacity style={styles.checkboxContainer} onPress={onToggle}>
+    <TouchableOpacity 
+      style={styles.checkboxContainer} 
+      onPress={onToggle}
+      activeOpacity={isAndroid ? 0.7 : 0.2}
+      {...(isAndroid && {
+        android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+      })}
+    >
       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
         {checked && <Ionicons name="checkmark" size={16} color={Colors.text} />}
       </View>
@@ -605,7 +654,10 @@ export default function DashboardScreen() {
     <TouchableOpacity 
       style={styles.transactionItem}
       onPress={() => navigateToTransaction(transaction)}
-      activeOpacity={0.7}
+      activeOpacity={isAndroid ? 0.7 : 0.2}
+      {...(isAndroid && {
+        android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+      })}
     >
       <View style={styles.transactionHeader}>
         <View style={styles.transactionLeft}>
@@ -637,8 +689,12 @@ export default function DashboardScreen() {
             style={styles.actionIcon} 
             onPress={(e) => {
               e.stopPropagation();
-              shareInvoicePDF(transaction);
+              sharePDF(transaction);
             }}
+            activeOpacity={isAndroid ? 0.7 : 0.2}
+            {...(isAndroid && {
+              android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+            })}
           >
             <Ionicons name="share-outline" size={20} color={Colors.primary} />
           </TouchableOpacity>
@@ -650,6 +706,40 @@ export default function DashboardScreen() {
               e.stopPropagation();
               generateAndShareInvoicePDF(transaction);
             }}
+            activeOpacity={isAndroid ? 0.7 : 0.2}
+            {...(isAndroid && {
+              android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+            })}
+          >
+            <Ionicons name="share-outline" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+        {transaction.type === 'purchase' && transaction.pdfUri && (
+          <TouchableOpacity 
+            style={styles.actionIcon} 
+            onPress={(e) => {
+              e.stopPropagation();
+              sharePDF(transaction);
+            }}
+            activeOpacity={isAndroid ? 0.7 : 0.2}
+            {...(isAndroid && {
+              android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+            })}
+          >
+            <Ionicons name="share-outline" size={20} color={Colors.primary} />
+          </TouchableOpacity>
+        )}
+        {transaction.type === 'purchase' && !transaction.pdfUri && (
+          <TouchableOpacity 
+            style={styles.actionIcon} 
+            onPress={(e) => {
+              e.stopPropagation();
+              generateAndSharePurchaseBillPDF(transaction);
+            }}
+            activeOpacity={isAndroid ? 0.7 : 0.2}
+            {...(isAndroid && {
+              android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+            })}
           >
             <Ionicons name="share-outline" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
@@ -660,6 +750,10 @@ export default function DashboardScreen() {
             e.stopPropagation();
             Alert.alert('Coming Soon!', 'Print functionality will be available soon.');
           }}
+          activeOpacity={isAndroid ? 0.7 : 0.2}
+          {...(isAndroid && {
+            android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+          })}
         >
           <Ionicons name="print-outline" size={20} color={Colors.textSecondary} />
         </TouchableOpacity>
@@ -669,6 +763,10 @@ export default function DashboardScreen() {
             e.stopPropagation();
             deleteTransaction(transaction);
           }}
+          activeOpacity={isAndroid ? 0.7 : 0.2}
+          {...(isAndroid && {
+            android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+          })}
         >
           <Ionicons name="trash-outline" size={20} color={Colors.error} />
         </TouchableOpacity>
@@ -679,7 +777,13 @@ export default function DashboardScreen() {
   );
 
     const CustomerItem = ({ customer }: { customer: Customer }) => (
-    <TouchableOpacity style={styles.customerItem}>
+    <TouchableOpacity 
+      style={styles.customerItem}
+      activeOpacity={isAndroid ? 0.7 : 0.2}
+      {...(isAndroid && {
+        android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+      })}
+    >
       <View style={styles.customerHeader}>
         <Text style={styles.customerName}>{customer.name}</Text>
         <Text style={[
@@ -693,7 +797,13 @@ export default function DashboardScreen() {
   );
 
   const SupplierItem = ({ supplier }: { supplier: Supplier }) => (
-    <TouchableOpacity style={styles.customerItem}>
+    <TouchableOpacity 
+      style={styles.customerItem}
+      activeOpacity={isAndroid ? 0.7 : 0.2}
+      {...(isAndroid && {
+        android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+      })}
+    >
       <View style={styles.customerHeader}>
         <Text style={styles.customerName}>{supplier.name}</Text>
         <Text style={[
@@ -727,7 +837,13 @@ export default function DashboardScreen() {
     }
     
     return (
-      <TouchableOpacity style={styles.customerItem}>
+      <TouchableOpacity 
+        style={styles.customerItem}
+        activeOpacity={isAndroid ? 0.7 : 0.2}
+        {...(isAndroid && {
+          android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+        })}
+      >
         <View style={styles.customerHeader}>
           <View style={styles.partyInfo}>
             <Text style={styles.customerName}>{data.name}</Text>
@@ -751,6 +867,11 @@ export default function DashboardScreen() {
       <ScrollView 
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
+        // Android-specific: Optimize scrolling
+        {...(isAndroid && {
+          overScrollMode: 'never',
+          nestedScrollEnabled: true,
+        })}
       >
       {/* Header */}
       <View style={styles.header}>
@@ -763,6 +884,10 @@ export default function DashboardScreen() {
         <TouchableOpacity 
           style={styles.settingsButton}
           onPress={() => router.push('/company-details')}
+          activeOpacity={isAndroid ? 0.7 : 0.2}
+          {...(isAndroid && {
+            android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+          })}
         >
           <Ionicons name="settings-outline" size={24} color={Colors.textSecondary} />
         </TouchableOpacity>
@@ -773,6 +898,10 @@ export default function DashboardScreen() {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'transactions' && styles.activeTab]}
           onPress={() => setActiveTab('transactions')}
+          activeOpacity={isAndroid ? 0.7 : 0.2}
+          {...(isAndroid && {
+            android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+          })}
         >
           <Text style={[styles.tabText, activeTab === 'transactions' && styles.activeTabText]}>
             Transactions
@@ -781,6 +910,10 @@ export default function DashboardScreen() {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'party' && styles.activeTab]}
           onPress={() => setActiveTab('party')}
+          activeOpacity={isAndroid ? 0.7 : 0.2}
+          {...(isAndroid && {
+            android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+          })}
         >
           <Text style={[styles.tabText, activeTab === 'party' && styles.activeTabText]}>
             Party
@@ -803,14 +936,28 @@ export default function DashboardScreen() {
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                <Ionicons name="close-circle" size={20} color={Colors.textSecondary} />
+                          {searchQuery.length > 0 && (
+                <TouchableOpacity 
+                  onPress={() => setSearchQuery('')} 
+                  style={styles.clearButton}
+                  activeOpacity={isAndroid ? 0.7 : 0.2}
+                  {...(isAndroid && {
+                    android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                  })}
+                >
+                  <Ionicons name="close-circle" size={20} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity 
+                onPress={openFilterModal} 
+                style={styles.filterButton}
+                activeOpacity={isAndroid ? 0.7 : 0.2}
+                {...(isAndroid && {
+                  android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                })}
+              >
+                <Ionicons name="filter" size={20} color={Colors.textSecondary} />
               </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={openFilterModal} style={styles.filterButton}>
-              <Ionicons name="filter" size={20} color={Colors.textSecondary} />
-            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -858,11 +1005,25 @@ export default function DashboardScreen() {
                 onChangeText={setPartySearchQuery}
               />
               {partySearchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setPartySearchQuery('')} style={styles.clearButton}>
+                <TouchableOpacity 
+                  onPress={() => setPartySearchQuery('')} 
+                  style={styles.clearButton}
+                  activeOpacity={isAndroid ? 0.7 : 0.2}
+                  {...(isAndroid && {
+                    android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                  })}
+                >
                   <Ionicons name="close-circle" size={20} color={Colors.textSecondary} />
                 </TouchableOpacity>
               )}
-              <TouchableOpacity onPress={openPartyFilterModal} style={styles.filterButton}>
+              <TouchableOpacity 
+                onPress={openPartyFilterModal} 
+                style={styles.filterButton}
+                activeOpacity={isAndroid ? 0.7 : 0.2}
+                {...(isAndroid && {
+                  android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                })}
+              >
                 <Ionicons name="filter" size={20} color={Colors.textSecondary} />
               </TouchableOpacity>
             </View>
@@ -906,7 +1067,13 @@ export default function DashboardScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Filter Transactions</Text>
-              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+              <TouchableOpacity 
+                onPress={() => setShowFilterModal(false)}
+                activeOpacity={isAndroid ? 0.7 : 0.2}
+                {...(isAndroid && {
+                  android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                })}
+              >
                 <Ionicons name="close" size={24} color={Colors.text} />
               </TouchableOpacity>
             </View>
@@ -940,10 +1107,24 @@ export default function DashboardScreen() {
             </View>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+              <TouchableOpacity 
+                style={styles.clearFiltersButton} 
+                onPress={clearFilters}
+                activeOpacity={isAndroid ? 0.7 : 0.2}
+                {...(isAndroid && {
+                  android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                })}
+              >
                 <Text style={styles.clearFiltersText}>Clear</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.applyFiltersButton} onPress={applyFilters}>
+              <TouchableOpacity 
+                style={styles.applyFiltersButton} 
+                onPress={applyFilters}
+                activeOpacity={isAndroid ? 0.7 : 0.2}
+                {...(isAndroid && {
+                  android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                })}
+              >
                 <Text style={styles.applyFiltersText}>Apply</Text>
               </TouchableOpacity>
             </View>
@@ -962,7 +1143,13 @@ export default function DashboardScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Filter Parties</Text>
-              <TouchableOpacity onPress={() => setShowPartyFilterModal(false)}>
+              <TouchableOpacity 
+                onPress={() => setShowPartyFilterModal(false)}
+                activeOpacity={isAndroid ? 0.7 : 0.2}
+                {...(isAndroid && {
+                  android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                })}
+              >
                 <Ionicons name="close" size={24} color={Colors.text} />
               </TouchableOpacity>
             </View>
@@ -986,10 +1173,24 @@ export default function DashboardScreen() {
             </View>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.clearFiltersButton} onPress={clearPartyFilters}>
+              <TouchableOpacity 
+                style={styles.clearFiltersButton} 
+                onPress={clearPartyFilters}
+                activeOpacity={isAndroid ? 0.7 : 0.2}
+                {...(isAndroid && {
+                  android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                })}
+              >
                 <Text style={styles.clearFiltersText}>Clear</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.applyFiltersButton} onPress={applyPartyFilters}>
+              <TouchableOpacity 
+                style={styles.applyFiltersButton} 
+                onPress={applyPartyFilters}
+                activeOpacity={isAndroid ? 0.7 : 0.2}
+                {...(isAndroid && {
+                  android_ripple: { color: ANDROID_CONSTANTS.rippleColor },
+                })}
+              >
                 <Text style={styles.applyFiltersText}>Apply</Text>
               </TouchableOpacity>
             </View>
@@ -1008,10 +1209,15 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    // Android-specific: Optimize scrolling performance
+    ...(isAndroid && {
+      overScrollMode: 'never',
+      nestedScrollEnabled: true,
+    }),
   },
   header: {
     padding: 20,
-    paddingTop: 10,
+    paddingTop: isAndroid ? 60 : 20, // Increased padding for Android status bar
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
@@ -1022,6 +1228,11 @@ const styles = StyleSheet.create({
   settingsButton: {
     padding: 8,
     marginTop: 4,
+    // Android-specific: Ensure minimum touch target
+    minWidth: ANDROID_CONSTANTS.touchTargetMinSize,
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   greeting: {
     fontSize: 16,
@@ -1040,12 +1251,23 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 4,
+    // Android-specific: Add elevation for Material Design
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   tab: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
     borderRadius: 8,
+    // Android-specific: Ensure minimum touch target
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
   },
   activeTab: {
     backgroundColor: Colors.primary,
@@ -1076,6 +1298,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    // Android-specific: Add elevation and optimize input
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   searchIcon: {
     marginRight: 12,
@@ -1084,12 +1314,27 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: Colors.text,
+    // Android-specific: Optimize text input
+    ...(isAndroid && {
+      textAlignVertical: 'center',
+      includeFontPadding: false,
+    }),
   },
   clearButton: {
     marginLeft: 8,
+    // Android-specific: Ensure minimum touch target
+    minWidth: ANDROID_CONSTANTS.touchTargetMinSize,
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterButton: {
     marginLeft: 8,
+    // Android-specific: Ensure minimum touch target
+    minWidth: ANDROID_CONSTANTS.touchTargetMinSize,
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   transactionsContainer: {
     paddingHorizontal: 20,
@@ -1100,6 +1345,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    // Android-specific: Add elevation and optimize touch
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   transactionHeader: {
     flexDirection: 'row',
@@ -1208,6 +1461,14 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     padding: 20,
     maxHeight: '60%',
+    // Android-specific: Add elevation for modal
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.high,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    }),
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1259,6 +1520,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: 'center',
+    // Android-specific: Ensure minimum touch target
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
   },
   clearFiltersText: {
     fontSize: 16,
@@ -1272,6 +1536,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.primary,
     alignItems: 'center',
+    // Android-specific: Ensure minimum touch target and add elevation
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.medium,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    }),
   },
   applyFiltersText: {
     fontSize: 16,
@@ -1289,6 +1563,11 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     borderRadius: 8,
     backgroundColor: Colors.surface,
+    // Android-specific: Ensure minimum touch target
+    minWidth: ANDROID_CONSTANTS.touchTargetMinSize,
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   // Customer styles
   customerItem: {
@@ -1296,6 +1575,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    // Android-specific: Add elevation for Material Design
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
   },
   customerHeader: {
     flexDirection: 'row',
