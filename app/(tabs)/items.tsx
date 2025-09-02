@@ -3,19 +3,19 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Dimensions,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
@@ -289,11 +289,16 @@ export default function ItemsScreen() {
   };
 
   const renderItem = ({ item }: { item: Item }) => (
-    <View style={styles.itemCard}>
-      <View style={styles.itemHeader}>
-        <View style={styles.itemLeft}>
+    <TouchableOpacity 
+      style={styles.itemCard}
+      onPress={() => router.push(`/edit-items?itemId=${item.id}`)}
+      activeOpacity={0.7}
+    >
+      {/* Main Item Info Row */}
+      <View style={styles.itemMainRow}>
+        <View style={styles.itemInfo}>
           <Text style={styles.itemName}>{item.productName}</Text>
-          <View style={styles.itemCategory}>
+          <View style={styles.itemMeta}>
             <View style={[
               styles.categoryBadge,
               { backgroundColor: item.category === 'Primary' ? Colors.primary + '20' : Colors.success + '20' }
@@ -305,52 +310,83 @@ export default function ItemsScreen() {
                 {item.category}
               </Text>
             </View>
+            <Text style={styles.itemDate}>{item.asOfDate}</Text>
           </View>
         </View>
-        <View style={styles.itemRight}>
-          <View style={styles.priceRow}>
-            <Text style={styles.itemPrice}>₹{item.salePrice.toLocaleString()}</Text>
-            <TouchableOpacity
-              style={styles.deleteIcon}
-              onPress={() => handleDeleteItem(item.id, item.productName)}
-            >
-              <Ionicons name="trash-outline" size={16} color={Colors.error} />
-            </TouchableOpacity>
+        
+        <View style={styles.itemActions}>
+          <TouchableOpacity
+            style={styles.editIcon}
+            onPress={(e) => {
+              e.stopPropagation();
+              router.push(`/edit-items?itemId=${item.id}`);
+            }}
+          >
+            <Ionicons name="pencil-outline" size={16} color={Colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.deleteIcon}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleDeleteItem(item.id, item.productName);
+            }}
+          >
+            <Ionicons name="trash-outline" size={16} color={Colors.error} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Price and Stock Row */}
+      <View style={styles.itemStatsRow}>
+        <View style={styles.priceSection}>
+          <Text style={styles.priceLabel}>Sale Price</Text>
+          <Text style={styles.itemPrice}>₹{item.salePrice.toLocaleString()}</Text>
+        </View>
+        
+        <View style={styles.stockSection}>
+          <Text style={styles.stockLabel}>Stock</Text>
+          <View style={styles.stockInfo}>
+            <Text style={[
+              styles.stockValue,
+              item.openingStock <= item.lowStockAlert && styles.lowStockText
+            ]}>
+              {item.openingStock.toFixed(1)} bags
+            </Text>
+            <Text style={styles.stockUnit}>({Math.round(item.openingStock * 30)} kg)</Text>
           </View>
-                     <View style={styles.stockRow}>
-             <Text style={[
-               styles.itemStock,
-               item.openingStock <= item.lowStockAlert && styles.lowStockText
-             ]}>
-               Stock: {item.openingStock.toFixed(2)} bags ({Math.round(item.openingStock * 30)} kg)
-             </Text>
-             {item.openingStock <= item.lowStockAlert && (
-               <Ionicons name="warning" size={16} color={Colors.error} />
-             )}
-           </View>
+          {item.openingStock <= item.lowStockAlert && (
+            <View style={styles.lowStockIndicator}>
+              <Ionicons name="warning" size={14} color={Colors.error} />
+              <Text style={styles.lowStockAlertText}>Low Stock</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Quick Details Row */}
+      <View style={styles.quickDetailsRow}>
+        <View style={styles.quickDetail}>
+          <Text style={styles.quickDetailLabel}>Purchase</Text>
+          <Text style={styles.quickDetailValue}>₹{item.purchasePrice.toLocaleString()}</Text>
+        </View>
+        
+        <View style={styles.quickDetail}>
+          <Text style={styles.quickDetailLabel}>Alert Level</Text>
+          <Text style={[
+            styles.quickDetailValue,
+            { color: item.openingStock <= item.lowStockAlert ? Colors.error : Colors.textSecondary }
+          ]}>
+            {item.lowStockAlert.toFixed(1)} bags
+          </Text>
         </View>
       </View>
       
-      <View style={styles.itemDetails}>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Purchase Price:</Text>
-          <Text style={styles.detailValue}>₹{item.purchasePrice.toLocaleString()}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Low Stock Alert:</Text>
-          <Text style={[
-            styles.detailValue,
-            { color: item.openingStock <= item.lowStockAlert ? Colors.error : Colors.textSecondary }
-          ]}>
-            {item.lowStockAlert.toFixed(2)} bags ({Math.round(item.lowStockAlert * 30)} kg)
-          </Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>As of Date:</Text>
-          <Text style={styles.detailValue}>{item.asOfDate}</Text>
-        </View>
+      {/* Edit hint */}
+      <View style={styles.editHint}>
+        <Ionicons name="pencil" size={12} color={Colors.textTertiary} />
+        <Text style={styles.editHintText}>Tap to edit</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderCreateModal = () => (
@@ -833,6 +869,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.border + '20',
     // Android-specific: Add elevation for Material Design
     ...(isAndroid && {
       elevation: ANDROID_CONSTANTS.elevation.low,
@@ -842,13 +880,14 @@ const styles = StyleSheet.create({
       shadowRadius: 2.22,
     }),
   },
-  itemHeader: {
+  // Main Item Info Row
+  itemMainRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  itemLeft: {
+  itemInfo: {
     flex: 1,
   },
   itemName: {
@@ -857,9 +896,10 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 8,
   },
-  itemCategory: {
+  itemMeta: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    gap: 12,
   },
   categoryBadge: {
     paddingHorizontal: 8,
@@ -870,19 +910,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  itemRight: {
-    alignItems: 'flex-end',
+  itemDate: {
+    fontSize: 12,
+    color: Colors.textTertiary,
   },
-  priceRow: {
+  itemActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: 4,
   },
-  itemPrice: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.success,
+  editIcon: {
+    padding: 4,
+    // Android-specific: Ensure minimum touch target
+    minWidth: ANDROID_CONSTANTS.touchTargetMinSize,
+    minHeight: ANDROID_CONSTANTS.touchTargetMinSize,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   deleteIcon: {
     padding: 4,
@@ -892,29 +935,122 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  itemStock: {
+  // Price and Stock Row
+  itemStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border + '20',
+  },
+  priceSection: {
+    flex: 1,
+  },
+  priceLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 4,
+  },
+  itemPrice: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.success,
+  },
+  stockSection: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  stockLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 4,
+    textAlign: 'right',
+  },
+  stockInfo: {
+    alignItems: 'flex-end',
+    marginBottom: 4,
+  },
+  stockValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  stockUnit: {
     fontSize: 12,
     color: Colors.textSecondary,
   },
-  itemDetails: {
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    paddingTop: 12,
+  lowStockIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  detailRow: {
+  lowStockAlertText: {
+    fontSize: 11,
+    color: Colors.error,
+    fontWeight: '500',
+  },
+  lowStockText: {
+    color: Colors.error,
+  },
+  // Quick Details Row
+  quickDetailsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  quickDetail: {
+    flex: 1,
     alignItems: 'center',
-    marginBottom: 6,
   },
-  detailLabel: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+  quickDetailLabel: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  detailValue: {
+  quickDetailValue: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: Colors.text,
+  },
+  // Low Stock Alert Banner
+  lowStockAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.error + '20',
+    borderWidth: 1,
+    borderColor: Colors.error,
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    gap: 12,
+    // Android-specific: Add elevation for Material Design
+    ...(isAndroid && {
+      elevation: ANDROID_CONSTANTS.elevation.low,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.22,
+      shadowRadius: 2.22,
+    }),
+  },
+  editHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border + '30',
+  },
+  editHintText: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    fontStyle: 'italic',
   },
   emptyState: {
     alignItems: 'center',
@@ -1132,39 +1268,5 @@ const styles = StyleSheet.create({
       fontWeight: '500',
       color: Colors.textSecondary,
     },
-      lowStockAlert: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.error + '20',
-    borderWidth: 1,
-    borderColor: Colors.error,
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 20,
-    marginBottom: 16,
-    gap: 12,
-    // Android-specific: Add elevation for Material Design
-    ...(isAndroid && {
-      elevation: ANDROID_CONSTANTS.elevation.low,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.22,
-      shadowRadius: 2.22,
-    }),
-  },
-    lowStockAlertText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: Colors.error,
-      flex: 1,
-    },
-    stockRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    lowStockText: {
-      color: Colors.error,
-      fontWeight: '600',
-    },
+
   });

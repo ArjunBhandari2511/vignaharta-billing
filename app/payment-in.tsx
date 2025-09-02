@@ -14,7 +14,8 @@ import {
   View,
 } from 'react-native';
 import { Colors } from '../constants/Colors';
-import { Customer, CustomerManager } from '../utils/customerManager';
+import { Party, PartyManager } from '../utils/partyManager';
+import { PaymentInPdfGenerator } from '../utils/paymentInPdfGenerator';
 import { Storage, STORAGE_KEYS } from '../utils/storage';
 
 interface PaymentIn {
@@ -33,9 +34,9 @@ export default function PaymentInScreen() {
   const [paymentsIn, setPaymentsIn] = useState<PaymentIn[]>([]);
   const [totalPayments, setTotalPayments] = useState(0);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [parties, setParties] = useState<Party[]>([]);
+  const [filteredParties, setFilteredParties] = useState<Party[]>([]);
+  const [showPartyDropdown, setShowPartyDropdown] = useState(false);
   
   // Payment form states
   const [paymentForm, setPaymentForm] = useState({
@@ -45,12 +46,12 @@ export default function PaymentInScreen() {
     totalAmount: '',
   });
   
-  // Selected customer state
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  // Selected party state
+  const [selectedParty, setSelectedParty] = useState<Party | null>(null);
 
   useEffect(() => {
     loadPaymentData();
-    loadCustomers();
+    loadParties();
   }, []);
 
   const loadPaymentData = async () => {
@@ -98,12 +99,12 @@ export default function PaymentInScreen() {
     return migratedPayments;
   };
 
-  const loadCustomers = async () => {
+  const loadParties = async () => {
     try {
-      const allCustomers = await CustomerManager.getAllCustomers();
-      setCustomers(allCustomers);
+      const allParties = await PartyManager.getPartiesByType('customer');
+      setParties(allParties);
     } catch (error) {
-      console.error('Error loading customers:', error);
+      console.error('Error loading parties:', error);
     }
   };
 
@@ -128,15 +129,15 @@ export default function PaymentInScreen() {
     return `PAY-${nextNumber}`;
   };
 
-  // Handle customer name input with search suggestions
-  const handleCustomerNameChange = (customerName: string) => {
-    setPaymentForm(prev => ({ ...prev, customerName }));
+  // Handle party name input with search suggestions
+  const handlePartyNameChange = (partyName: string) => {
+    setPaymentForm(prev => ({ ...prev, customerName: partyName }));
     
-    if (!customerName.trim()) {
-      setFilteredCustomers([]);
-      setShowCustomerDropdown(false);
-      setSelectedCustomer(null);
-      // Clear other fields when customer name is cleared
+    if (!partyName.trim()) {
+      setFilteredParties([]);
+      setShowPartyDropdown(false);
+      setSelectedParty(null);
+      // Clear other fields when party name is cleared
       setPaymentForm(prev => ({
         ...prev,
         phoneNumber: '',
@@ -145,25 +146,25 @@ export default function PaymentInScreen() {
       return;
     }
     
-    // Filter customers based on input
-    const filtered = customers.filter(customer =>
-      customer.name.toLowerCase().includes(customerName.toLowerCase())
+    // Filter parties based on input
+    const filtered = parties.filter(party =>
+      party.name.toLowerCase().includes(partyName.toLowerCase())
     );
     
-    setFilteredCustomers(filtered);
-    setShowCustomerDropdown(filtered.length > 0);
+    setFilteredParties(filtered);
+    setShowPartyDropdown(filtered.length > 0);
   };
 
-  // Handle customer selection from dropdown
-  const handleCustomerSelect = (customer: Customer) => {
-    setSelectedCustomer(customer);
+  // Handle party selection from dropdown
+  const handlePartySelect = (party: Party) => {
+    setSelectedParty(party);
     setPaymentForm(prev => ({
       ...prev,
-      customerName: customer.name,
-      phoneNumber: customer.phoneNumber,
-      totalAmount: customer.balance > 0 ? customer.balance.toString() : '0',
+      customerName: party.name,
+      phoneNumber: party.phoneNumber,
+      totalAmount: party.balance > 0 ? party.balance.toString() : '0',
     }));
-    setShowCustomerDropdown(false);
+    setShowPartyDropdown(false);
   };
 
   const handleCreatePayment = async () => {
@@ -192,7 +193,7 @@ export default function PaymentInScreen() {
       customerName: paymentForm.customerName,
       phoneNumber: paymentForm.phoneNumber,
       received: receivedAmount,
-      totalAmount: selectedCustomer ? selectedCustomer.balance : 0,
+      totalAmount: selectedParty ? selectedParty.balance : 0,
       date: new Date().toLocaleDateString(),
       status: 'completed',
     };
@@ -208,7 +209,7 @@ export default function PaymentInScreen() {
       received: '',
       totalAmount: '',
     });
-    setSelectedCustomer(null);
+    setSelectedParty(null);
     setShowPaymentModal(false);
     
     // Save to storage
@@ -222,6 +223,20 @@ export default function PaymentInScreen() {
     } catch (error) {
       console.error('Error saving payment:', error);
       Alert.alert('Error', 'Failed to save payment. Please try again.');
+    }
+  };
+
+
+
+  const handleSharePDF = async (payment: PaymentIn) => {
+    try {
+      const success = await PaymentInPdfGenerator.generateAndSharePaymentReceipt(payment);
+      if (!success) {
+        Alert.alert('Error', 'Failed to generate and share PDF');
+      }
+    } catch (error) {
+      console.error('Error sharing PDF:', error);
+      Alert.alert('Error', 'Failed to share PDF');
     }
   };
 
@@ -248,27 +263,38 @@ export default function PaymentInScreen() {
           </Text>
         </View>
       </View>
+      
+      {/* PDF Share Action */}
+      <View style={styles.paymentActions}>
+        <TouchableOpacity 
+          style={styles.shareButton}
+          onPress={() => handleSharePDF(item)}
+        >
+          <Ionicons name="share-outline" size={16} color={Colors.success} />
+          <Text style={styles.shareButtonText}>Share PDF</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
-  const renderCustomerSuggestion = ({ item }: { item: Customer }) => (
+  const renderPartySuggestion = ({ item }: { item: Party }) => (
     <TouchableOpacity
-      style={styles.customerSuggestion}
-      onPress={() => handleCustomerSelect(item)}
+      style={styles.partySuggestion}
+      onPress={() => handlePartySelect(item)}
     >
-      <View style={styles.customerSuggestionLeft}>
-        <Text style={styles.customerSuggestionName}>{item.name}</Text>
-        <Text style={styles.customerSuggestionPhone}>{item.phoneNumber}</Text>
+      <View style={styles.partySuggestionLeft}>
+        <Text style={styles.partySuggestionName}>{item.name}</Text>
+        <Text style={styles.partySuggestionPhone}>{item.phoneNumber}</Text>
       </View>
-      <View style={styles.customerSuggestionRight}>
+      <View style={styles.partySuggestionRight}>
         <Text style={[
-          styles.customerSuggestionBalance,
+          styles.partySuggestionBalance,
           { color: item.balance > 0 ? Colors.success : item.balance < 0 ? Colors.error : Colors.textSecondary }
         ]}>
           ₹{Math.abs(item.balance).toLocaleString()}
         </Text>
         <Text style={[
-          styles.customerSuggestionStatus,
+          styles.partySuggestionStatus,
           { color: item.balance > 0 ? Colors.success : item.balance < 0 ? Colors.error : Colors.textSecondary }
         ]}>
           {item.balance > 0 ? 'They Owe' : item.balance < 0 ? 'You Owe' : 'Settled'}
@@ -305,30 +331,30 @@ export default function PaymentInScreen() {
               <Text style={styles.paymentNumberValue}>{generateNextPaymentNumber()}</Text>
             </View>
             
-            <View style={styles.customerInputContainer}>
+            <View style={styles.partyInputContainer}>
               <Text style={styles.fieldLabel}>Customer Name *</Text>
               <TextInput
                 style={[
                   styles.input,
-                  selectedCustomer && styles.autoFilledInput
+                  selectedParty && styles.autoFilledInput
                 ]}
-                placeholder="Search customer name..."
+                placeholder="Search party name..."
                 placeholderTextColor={Colors.textTertiary}
                 value={paymentForm.customerName}
-                onChangeText={handleCustomerNameChange}
+                onChangeText={handlePartyNameChange}
                 onFocus={() => {
                   if (paymentForm.customerName.trim()) {
-                    setShowCustomerDropdown(true);
+                    setShowPartyDropdown(true);
                   }
                 }}
               />
               
-              {/* Customer suggestions dropdown */}
-              {showCustomerDropdown && filteredCustomers.length > 0 && (
-                <View style={styles.customerSuggestions}>
+              {/* Party suggestions dropdown */}
+              {showPartyDropdown && filteredParties.length > 0 && (
+                <View style={styles.partySuggestions}>
                   <FlatList
-                    data={filteredCustomers}
-                    renderItem={renderCustomerSuggestion}
+                    data={filteredParties}
+                    renderItem={renderPartySuggestion}
                     keyExtractor={(item) => item.id}
                     scrollEnabled={false}
                     showsVerticalScrollIndicator={false}
@@ -336,37 +362,37 @@ export default function PaymentInScreen() {
                 </View>
               )}
               
-              {/* Selected customer info */}
-              {selectedCustomer && (
+              {/* Selected party info */}
+              {selectedParty && (
                 <View style={[
-                  styles.selectedCustomerInfo,
+                  styles.selectedPartyInfo,
                   { 
-                    backgroundColor: selectedCustomer.balance > 0 
+                    backgroundColor: selectedParty.balance > 0 
                       ? Colors.success + '10' 
-                      : selectedCustomer.balance < 0 
+                      : selectedParty.balance < 0 
                         ? Colors.error + '10' 
                         : Colors.surfaceVariant 
                   }
                 ]}>
                   <Ionicons 
-                    name={selectedCustomer.balance > 0 ? "arrow-up-circle" : selectedCustomer.balance < 0 ? "arrow-down-circle" : "checkmark-circle"} 
+                    name={selectedParty.balance > 0 ? "arrow-up-circle" : selectedParty.balance < 0 ? "arrow-down-circle" : "checkmark-circle"} 
                     size={20} 
-                    color={selectedCustomer.balance > 0 ? Colors.success : selectedCustomer.balance < 0 ? Colors.error : Colors.textSecondary} 
+                    color={selectedParty.balance > 0 ? Colors.success : selectedParty.balance < 0 ? Colors.error : Colors.textSecondary} 
                   />
                   <Text style={[
-                    styles.selectedCustomerBalance,
+                    styles.selectedPartyBalance,
                     { 
-                      color: selectedCustomer.balance > 0 
+                      color: selectedParty.balance > 0 
                         ? Colors.success 
-                        : selectedCustomer.balance < 0 
+                        : selectedParty.balance < 0 
                           ? Colors.error 
                           : Colors.textSecondary 
                     }
                   ]}>
-                    {selectedCustomer.balance > 0 
-                      ? `They owe ₹${selectedCustomer.balance.toLocaleString()}` 
-                      : selectedCustomer.balance < 0 
-                        ? `You owe ₹${Math.abs(selectedCustomer.balance).toLocaleString()}` 
+                    {selectedParty.balance > 0 
+                      ? `They owe ₹${selectedParty.balance.toLocaleString()}` 
+                      : selectedParty.balance < 0 
+                        ? `You owe ₹${Math.abs(selectedParty.balance).toLocaleString()}` 
                         : 'All settled up'
                     }
                   </Text>
@@ -378,17 +404,17 @@ export default function PaymentInScreen() {
             <TextInput
               style={[
                 styles.input,
-                selectedCustomer && styles.autoFilledInput
+                selectedParty && styles.autoFilledInput
               ]}
               placeholder="Enter phone number..."
               placeholderTextColor={Colors.textTertiary}
               value={paymentForm.phoneNumber}
               onChangeText={(text) => setPaymentForm(prev => ({ ...prev, phoneNumber: text }))}
               keyboardType="phone-pad"
-              editable={!selectedCustomer}
+              editable={!selectedParty}
             />
-            {selectedCustomer && (
-              <Text style={styles.helperText}>Auto-filled from customer data</Text>
+            {selectedParty && (
+              <Text style={styles.helperText}>Auto-filled from party data</Text>
             )}
             
             <Text style={styles.fieldLabel}>Received Amount *</Text>
@@ -401,10 +427,10 @@ export default function PaymentInScreen() {
               keyboardType="numeric"
             />
             
-            {selectedCustomer && selectedCustomer.balance > 0 && (
+            {selectedParty && selectedParty.balance > 0 && (
               <View style={styles.balanceInfo}>
                 <Text style={styles.balanceInfoText}>
-                  Outstanding Balance: ₹{selectedCustomer.balance.toLocaleString()}
+                  Outstanding Balance: ₹{selectedParty.balance.toLocaleString()}
                 </Text>
                 <Text style={styles.balanceInfoSubtext}>
                   This payment will reduce the outstanding amount
@@ -449,8 +475,8 @@ export default function PaymentInScreen() {
             <Text style={styles.statLabel}>Total Received</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{customers.length}</Text>
-            <Text style={styles.statLabel}>Total Customers</Text>
+            <Text style={styles.statValue}>{parties.length}</Text>
+            <Text style={styles.statLabel}>Total Parties</Text>
           </View>
         </View>
 
@@ -636,6 +662,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
   },
+  // PDF Share Action
+  paymentActions: {
+    marginTop: 12,
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.success + '10',
+    borderWidth: 1,
+    borderColor: Colors.success + '30',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  shareButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.success,
+  },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
@@ -751,11 +798,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: Colors.textSecondary,
   },
-  // Customer suggestions styles
-  customerInputContainer: {
+  // Party suggestions styles
+  partyInputContainer: {
     position: 'relative',
   },
-  customerSuggestions: {
+  partySuggestions: {
     position: 'absolute',
     top: '100%',
     left: 0,
@@ -772,39 +819,39 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  customerSuggestion: {
+  partySuggestion: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  customerSuggestionLeft: {
+  partySuggestionLeft: {
     flex: 1,
   },
-  customerSuggestionName: {
+  partySuggestionName: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
   },
-  customerSuggestionPhone: {
+  partySuggestionPhone: {
     fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 2,
   },
-  customerSuggestionRight: {
+  partySuggestionRight: {
     alignItems: 'flex-end',
   },
-  customerSuggestionBalance: {
+  partySuggestionBalance: {
     fontSize: 14,
     fontWeight: '600',
   },
-  customerSuggestionStatus: {
+  partySuggestionStatus: {
     fontSize: 10,
     marginTop: 2,
   },
-  // Selected customer info styles
-  selectedCustomerInfo: {
+  // Selected party info styles
+  selectedPartyInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -813,7 +860,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 8,
   },
-  selectedCustomerBalance: {
+  selectedPartyBalance: {
     fontSize: 12,
     fontWeight: '500',
   },

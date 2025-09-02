@@ -199,7 +199,7 @@ export default function EditPurchaseScreen() {
       });
     }
 
-    setItemForm({ name: '', quantity: '', rate: '' });
+    setItemForm({ quantity: '', rate: '' });
     setEditingItem(null);
     setShowItemModal(false);
   };

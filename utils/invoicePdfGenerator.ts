@@ -37,7 +37,9 @@ interface SaleItem {
 export class InvoicePdfGenerator {
   private static async getCompanyDetails(): Promise<CompanyDetails | null> {
     try {
-      return await Storage.getObject<CompanyDetails>(STORAGE_KEYS.COMPANY_DETAILS);
+      const details = await Storage.getObject<CompanyDetails>(STORAGE_KEYS.COMPANY_DETAILS);
+      console.log('Loaded company details:', details);
+      return details;
     } catch (error) {
       console.error('Error loading company details:', error);
       return null;
@@ -397,6 +399,7 @@ export class InvoicePdfGenerator {
 
   static async generateInvoicePDF(invoice: SaleInvoice): Promise<string | null> {
     try {
+      console.log('Starting invoice PDF generation for:', invoice.invoiceNo);
       // Get company details
       const companyDetails = await this.getCompanyDetails();
       
@@ -404,15 +407,19 @@ export class InvoicePdfGenerator {
       const html = this.generateInvoiceHTML(invoice, companyDetails);
       
       // Generate PDF
+      console.log('Generating PDF with HTML length:', html.length);
+      console.log('HTML preview (first 500 chars):', html.substring(0, 500));
       const { uri } = await Print.printToFileAsync({
         html: html,
         base64: false,
       });
       
       if (uri) {
+        console.log('PDF generated with URI:', uri);
         // Verify the file exists and has content
         try {
           const fileInfo = await FileSystem.getInfoAsync(uri);
+          console.log('File info:', fileInfo);
           
           if (!fileInfo.exists) {
             console.error('Generated PDF file does not exist');
@@ -423,12 +430,18 @@ export class InvoicePdfGenerator {
             console.error('Generated PDF file is empty');
             return null;
           }
+          
+          // File verification passed
+          console.log('File verification passed, size:', fileInfo.size);
+          return uri;
         } catch (fileError) {
           console.error('Error checking PDF file:', fileError);
+          return null;
         }
       }
       
-      return uri || null;
+      console.log('No URI returned from PDF generation');
+      return null;
     } catch (error) {
       console.error('Error generating invoice PDF:', error);
       return null;

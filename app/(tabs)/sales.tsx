@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { CloudinaryUploader } from '../../utils/cloudinaryUpload';
-import { CustomerManager } from '../../utils/customerManager';
+import { Party, PartyManager } from '../../utils/partyManager';
 import { InvoicePdfGenerator } from '../../utils/invoicePdfGenerator';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
 import { WASenderAPI } from '../../utils/wasenderApi';
@@ -65,7 +65,7 @@ interface SaleItem {
 export default function SalesScreen() {
   const router = useRouter();
   const [saleInvoices, setSaleInvoices] = useState<SaleInvoice[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Party[]>([]);
   
   // Modal states
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -150,7 +150,7 @@ export default function SalesScreen() {
 
   const loadCustomers = async () => {
     try {
-      const customersData = await CustomerManager.getAllCustomers();
+      const customersData = await PartyManager.getPartiesByType('customer');
       setCustomers(customersData);
     } catch (error) {
       console.error('Error loading customers:', error);

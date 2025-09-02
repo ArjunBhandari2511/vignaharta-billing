@@ -3,14 +3,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    FlatList,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  FlatList,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Colors } from '../constants/Colors';
 import { StockManager } from '../utils/stockManager';
@@ -281,10 +281,16 @@ export default function AddItemsScreen() {
         </View>
         
         {item.weightKg > 0 && (
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total:</Text>
-            <Text style={styles.totalValue}>₹{item.totalPrice.toFixed(2)}</Text>
-          </View>
+          <>
+            <View style={styles.bagsRow}>
+              <Text style={styles.bagsLabel}>Equivalent Bags:</Text>
+              <Text style={styles.bagsValue}>{(item.weightKg / 30).toFixed(2)} bags</Text>
+            </View>
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total:</Text>
+              <Text style={styles.totalValue}>₹{item.totalPrice.toFixed(2)}</Text>
+            </View>
+          </>
         )}
       </View>
     </View>
@@ -537,6 +543,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  bagsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 8,
+  },
+  bagsLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+  },
+  bagsValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   totalRow: {
     flexDirection: 'row',

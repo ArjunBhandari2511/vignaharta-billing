@@ -3,19 +3,19 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/Colors';
-import { CustomerManager } from '../utils/customerManager';
+import { Party, PartyManager } from '../utils/partyManager';
 import { Storage, STORAGE_KEYS } from '../utils/storage';
 
 interface SaleInvoice {
@@ -42,7 +42,7 @@ export default function EditInvoiceScreen() {
   const router = useRouter();
   const { invoiceId } = useLocalSearchParams<{ invoiceId: string }>();
   const [invoice, setInvoice] = useState<SaleInvoice | null>(null);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Party[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [selectedCustomerBalance, setSelectedCustomerBalance] = useState<number | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
@@ -250,7 +250,7 @@ export default function EditInvoiceScreen() {
 
   const loadCustomers = async () => {
     try {
-      const customersData = await CustomerManager.getAllCustomers();
+      const customersData = await PartyManager.getPartiesByType('customer');
       setCustomers(customersData);
     } catch (error) {
       console.error('Error loading customers:', error);

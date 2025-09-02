@@ -14,7 +14,7 @@ interface WASenderMessageResponse {
 export class WASenderAPI {
   private static readonly API_BASE_URL = 'https://www.wasenderapi.com/api';
   // TODO: Replace with your actual WASender API key
-  private static readonly API_KEY = '956cd4670c2da1a95c0c06736e07783ddf2d3fdcd8ed00eed0700118ed04117a';
+  private static readonly API_KEY = 'ca20fa5a42b1f8edc9d3496bee7b8083d162cdcdb82119325f8f9590e510a0be';
 
   /**
    * Get the current API key

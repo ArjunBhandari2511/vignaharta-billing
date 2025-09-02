@@ -15,58 +15,37 @@ interface CompanyDetails {
   profileImage?: string;
 }
 
-interface PurchaseBill {
+interface PaymentOut {
   id: string;
-  billNo: string;
+  paymentNo: string;
   supplierName: string;
   phoneNumber: string;
-  items: PurchaseItem[];
+  paid: number;
   totalAmount: number;
   date: string;
   status: 'pending' | 'completed' | 'cancelled';
 }
 
-interface PurchaseItem {
-  id: string;
-  itemName: string;
-  quantity: number;
-  rate: number;
-  total: number;
-}
-
-export class PurchaseBillPdfGenerator {
+export class PaymentOutPdfGenerator {
   private static async getCompanyDetails(): Promise<CompanyDetails | null> {
     try {
-      const details = await Storage.getObject<CompanyDetails>(STORAGE_KEYS.COMPANY_DETAILS);
-      console.log('Loaded company details:', details);
-      return details;
+      return await Storage.getObject<CompanyDetails>(STORAGE_KEYS.COMPANY_DETAILS);
     } catch (error) {
       console.error('Error loading company details:', error);
       return null;
     }
   }
 
-  private static generatePurchaseBillHTML(bill: PurchaseBill, companyDetails: CompanyDetails | null): string {
+  private static generatePaymentOutHTML(payment: PaymentOut, companyDetails: CompanyDetails | null): string {
     const currentDate = new Date().toLocaleDateString('en-IN');
-    const billDate = bill.date || currentDate;
+    const paymentDate = payment.date || currentDate;
     
-    // Generate items HTML
-    const itemsHTML = bill.items.map((item, index) => `
-      <tr>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: left;">${index + 1}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: left;">${item.itemName}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">₹${item.rate.toLocaleString()}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">₹${item.total.toLocaleString()}</td>
-      </tr>
-    `).join('');
-
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Purchase Bill #${bill.billNo}</title>
+        <title>Payment Voucher #${payment.paymentNo}</title>
         <style>
           body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -76,7 +55,7 @@ export class PurchaseBillPdfGenerator {
             color: #1f2937;
             line-height: 1.6;
           }
-          .bill-container {
+          .voucher-container {
             max-width: 800px;
             margin: 0 auto;
             background: #ffffff;
@@ -100,12 +79,12 @@ export class PurchaseBillPdfGenerator {
             opacity: 0.9;
             margin-bottom: 20px;
           }
-          .bill-title {
+          .voucher-title {
             font-size: 24px;
             font-weight: bold;
             margin-bottom: 10px;
           }
-          .bill-number {
+          .voucher-number {
             font-size: 18px;
             opacity: 0.9;
           }
@@ -142,61 +121,47 @@ export class PurchaseBillPdfGenerator {
           .info-value {
             color: #1f2937;
           }
-          .items-table {
-            width: 100%;
-            border-collapse: collapse;
+          .payment-details {
+            background: #fef2f2;
+            border: 2px solid #fecaca;
+            border-radius: 12px;
+            padding: 24px;
             margin: 20px 0;
-            background: #f9fafb;
-            border-radius: 8px;
-            overflow: hidden;
           }
-          .table-header {
-            background: #dc2626;
-            color: white;
-          }
-          .table-header th {
-            padding: 15px 12px;
-            text-align: left;
-            font-weight: 600;
-            font-size: 14px;
-          }
-          .table-header th:first-child {
+          .payment-details-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #dc2626;
+            margin-bottom: 16px;
             text-align: center;
           }
-          .table-header th:nth-child(3),
-          .table-header th:nth-child(4),
-          .table-header th:nth-child(5) {
-            text-align: center;
-          }
-          .table-header th:last-child {
-            text-align: right;
-          }
-          .total-section {
-            margin-top: 30px;
-            text-align: right;
-          }
-          .total-row {
+          .payment-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 0;
+            padding: 12px 0;
+            border-bottom: 1px solid #fecaca;
+          }
+          .payment-row:last-child {
+            border-bottom: none;
+            border-top: 2px solid #dc2626;
+            margin-top: 8px;
+            padding-top: 16px;
+          }
+          .payment-label {
+            font-weight: 600;
+            color: #374151;
             font-size: 16px;
           }
-          .total-label {
-            font-weight: 600;
-            color: #6b7280;
-          }
-          .total-amount {
+          .payment-amount {
             font-weight: bold;
-            color: #1f2937;
+            color: #dc2626;
+            font-size: 18px;
           }
           .grand-total {
             font-size: 20px;
             font-weight: bold;
             color: #dc2626;
-            border-top: 2px solid #e5e7eb;
-            padding-top: 10px;
-            margin-top: 10px;
           }
           .footer {
             margin-top: 40px;
@@ -241,7 +206,6 @@ export class PurchaseBillPdfGenerator {
             color: #6b7280;
             line-height: 1.4;
           }
-
           .watermark {
             position: fixed;
             top: 50%;
@@ -253,38 +217,56 @@ export class PurchaseBillPdfGenerator {
             pointer-events: none;
             z-index: -1;
           }
+          .status-badge {
+            display: inline-block;
+            background: #ef4444;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-left: 12px;
+          }
         </style>
       </head>
       <body>
-        <div class="watermark">${companyDetails?.businessName || 'PURCHASE BILL'}</div>
-        <div class="bill-container">
+        <div class="watermark">${companyDetails?.businessName || 'PAYMENT VOUCHER'}</div>
+        <div class="voucher-container">
           <div class="header">
             <div class="company-name">${companyDetails?.businessName || 'Your Business Name'}</div>
             <div class="company-description">${companyDetails?.businessDescription || 'Business Description'}</div>
-            <div class="bill-title">PURCHASE BILL</div>
-            <div class="bill-number">Bill #${bill.billNo}</div>
+            <div class="voucher-title">PAYMENT VOUCHER</div>
+            <div class="voucher-number">Voucher #${payment.paymentNo}</div>
           </div>
           
           <div class="content">
             <div class="info-section">
               <div class="info-block">
-                <div class="info-title">Bill From</div>
+                <div class="info-title">Paid To</div>
                 <div class="info-item">
-                  <span class="info-label">Supplier:</span>
-                  <span class="info-value">${bill.supplierName}</span>
+                  <span class="info-label">Supplier Name:</span>
+                  <span class="info-value">${payment.supplierName}</span>
                 </div>
                 <div class="info-item">
-                  <span class="info-label">Phone:</span>
-                  <span class="info-value">${bill.phoneNumber}</span>
+                  <span class="info-label">Phone Number:</span>
+                  <span class="info-value">${payment.phoneNumber}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-label">Date:</span>
-                  <span class="info-value">${billDate}</span>
+                  <span class="info-value">${paymentDate}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Status:</span>
+                  <span class="info-value">
+                    ${payment.status}
+                    <span class="status-badge">${payment.status}</span>
+                  </span>
                 </div>
               </div>
               
               <div class="info-block">
-                <div class="info-title">Bill To</div>
+                <div class="info-title">Business Details</div>
                 <div class="info-item">
                   <span class="info-label">Business:</span>
                   <span class="info-value">${companyDetails?.businessName || 'Your Business Name'}</span>
@@ -308,29 +290,22 @@ export class PurchaseBillPdfGenerator {
               </div>
             </div>
             
-            <table class="items-table">
-              <thead class="table-header">
-                <tr>
-                  <th>Sr. No.</th>
-                  <th>Item Description</th>
-                  <th>Quantity</th>
-                  <th>Rate (₹)</th>
-                  <th>Amount (₹)</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${itemsHTML}
-              </tbody>
-            </table>
-            
-            <div class="total-section">
-              <div class="total-row">
-                <span class="total-label">Total Amount:</span>
-                <span class="total-amount">₹${bill.totalAmount.toLocaleString()}</span>
+            <div class="payment-details">
+              <div class="payment-details-title">Payment Summary</div>
+              
+              <div class="payment-row">
+                <span class="payment-label">Outstanding Balance:</span>
+                <span class="payment-amount">₹${payment.totalAmount.toLocaleString()}</span>
               </div>
-              <div class="total-row grand-total">
-                <span class="total-label">Grand Total:</span>
-                <span class="total-amount">₹${bill.totalAmount.toLocaleString()}</span>
+              
+              <div class="payment-row">
+                <span class="payment-label">Amount Paid:</span>
+                <span class="payment-amount">₹${payment.paid.toLocaleString()}</span>
+              </div>
+              
+              <div class="payment-row">
+                <span class="payment-label">Remaining Balance:</span>
+                <span class="payment-amount">₹${(payment.totalAmount - payment.paid).toLocaleString()}</span>
               </div>
             </div>
             
@@ -344,9 +319,9 @@ export class PurchaseBillPdfGenerator {
               <div class="terms-section">
                 <div class="terms-title">Terms & Conditions</div>
                 <div class="terms-text">
-                  • Payment will be made within 30 days of bill date<br>
-                  • Goods received in good condition<br>
-                  • Any defects must be reported within 7 days<br>
+                  • This voucher confirms payment made<br>
+                  • Payment is non-refundable<br>
+                  • Voucher is valid for accounting purposes<br>
                   • Subject to local jurisdiction
                 </div>
               </div>
@@ -360,13 +335,13 @@ export class PurchaseBillPdfGenerator {
     return html;
   }
 
-  static async generateAndSharePurchaseBill(bill: PurchaseBill): Promise<boolean> {
+  static async generateAndSharePaymentVoucher(payment: PaymentOut): Promise<boolean> {
     try {
       // Get company details
       const companyDetails = await this.getCompanyDetails();
       
       // Generate HTML
-      const html = this.generatePurchaseBillHTML(bill, companyDetails);
+      const html = this.generatePaymentOutHTML(payment, companyDetails);
       
       // Generate PDF
       const { uri } = await Print.printToFileAsync({
@@ -381,7 +356,7 @@ export class PurchaseBillPdfGenerator {
         if (isSharingAvailable) {
           await Sharing.shareAsync(uri, {
             mimeType: 'application/pdf',
-            dialogTitle: `Purchase Bill #${bill.billNo}`,
+            dialogTitle: `Payment Voucher #${payment.paymentNo}`,
           });
           return true;
         } else {
@@ -391,34 +366,29 @@ export class PurchaseBillPdfGenerator {
         throw new Error('Failed to generate PDF file');
       }
     } catch (error) {
-      console.error('Error generating and sharing purchase bill:', error);
+      console.error('Error generating and sharing payment voucher:', error);
       return false;
     }
   }
 
-  static async generatePurchaseBillPDF(bill: PurchaseBill): Promise<string | null> {
+  static async generatePaymentVoucherPDF(payment: PaymentOut): Promise<string | null> {
     try {
-      console.log('Starting purchase bill PDF generation for:', bill.billNo);
       // Get company details
       const companyDetails = await this.getCompanyDetails();
       
       // Generate HTML
-      const html = this.generatePurchaseBillHTML(bill, companyDetails);
+      const html = this.generatePaymentOutHTML(payment, companyDetails);
       
       // Generate PDF
-      console.log('Generating PDF with HTML length:', html.length);
-      console.log('HTML preview (first 500 chars):', html.substring(0, 500));
       const { uri } = await Print.printToFileAsync({
         html: html,
         base64: false,
       });
       
       if (uri) {
-        console.log('PDF generated with URI:', uri);
         // Verify the file exists and has content
         try {
           const fileInfo = await FileSystem.getInfoAsync(uri);
-          console.log('File info:', fileInfo);
           
           if (!fileInfo.exists) {
             console.error('Generated PDF file does not exist');
@@ -429,27 +399,21 @@ export class PurchaseBillPdfGenerator {
             console.error('Generated PDF file is empty');
             return null;
           }
-          
-          // File verification passed
-          console.log('File verification passed, size:', fileInfo.size);
-          return uri;
         } catch (fileError) {
           console.error('Error checking PDF file:', fileError);
-          return null;
         }
       }
       
-      console.log('No URI returned from PDF generation');
-      return null;
+      return uri || null;
     } catch (error) {
-      console.error('Error generating purchase bill PDF:', error);
+      console.error('Error generating payment voucher PDF:', error);
       return null;
     }
   }
 
-  static async savePurchaseBillToDocuments(bill: PurchaseBill): Promise<string | null> {
+  static async savePaymentVoucherToDocuments(payment: PaymentOut): Promise<string | null> {
     try {
-      const fileUri = await this.generatePurchaseBillPDF(bill);
+      const fileUri = await this.generatePaymentVoucherPDF(payment);
       
       if (fileUri) {
         // Get the documents directory
@@ -458,7 +422,7 @@ export class PurchaseBillPdfGenerator {
           throw new Error('Documents directory not available');
         }
         
-        const fileName = `PurchaseBill_${bill.billNo}_${Date.now()}.pdf`;
+        const fileName = `PaymentVoucher_${payment.paymentNo}_${Date.now()}.pdf`;
         const destinationUri = `${documentsDir}${fileName}`;
         
         // Copy the file to documents directory
@@ -472,7 +436,7 @@ export class PurchaseBillPdfGenerator {
       
       return null;
     } catch (error) {
-      console.error('Error saving purchase bill to documents:', error);
+      console.error('Error saving payment voucher to documents:', error);
       return null;
     }
   }

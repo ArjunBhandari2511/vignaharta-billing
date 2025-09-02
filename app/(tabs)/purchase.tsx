@@ -22,7 +22,7 @@ import { Colors } from '../../constants/Colors';
 import { CloudinaryUploader } from '../../utils/cloudinaryUpload';
 import { PurchaseBillPdfGenerator } from '../../utils/purchaseBillPdfGenerator';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
-import { SupplierManager } from '../../utils/supplierManager';
+import { Party, PartyManager } from '../../utils/partyManager';
 import { WASenderAPI } from '../../utils/wasenderApi';
 
 // Android-specific utilities
@@ -65,7 +65,7 @@ interface PurchaseItem {
 export default function PurchaseScreen() {
   const router = useRouter();
   const [purchaseBills, setPurchaseBills] = useState<PurchaseBill[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<Party[]>([]);
   
   // Modal states
   const [showBillModal, setShowBillModal] = useState(false);
@@ -149,7 +149,7 @@ export default function PurchaseScreen() {
 
   const loadSuppliers = async () => {
     try {
-      const suppliersData = await SupplierManager.getAllSuppliers();
+      const suppliersData = await PartyManager.getPartiesByType('supplier');
       setSuppliers(suppliersData);
     } catch (error) {
       console.error('Error loading suppliers:', error);

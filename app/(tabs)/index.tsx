@@ -19,11 +19,10 @@ import {
   View
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
-import { CustomerManager } from '../../utils/customerManager';
 import { InvoicePdfGenerator } from '../../utils/invoicePdfGenerator';
+import { Party, PartyManager } from '../../utils/partyManager';
 import { PurchaseBillPdfGenerator } from '../../utils/purchaseBillPdfGenerator';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
-import { SupplierManager } from '../../utils/supplierManager';
 
 // Android-specific utilities
 const isAndroid = Platform.OS === 'android';
@@ -62,25 +61,9 @@ interface FilterOptions {
   paymentOut: boolean;
 }
 
-interface Customer {
-  id: string;
-  name: string;
-  phoneNumber: string;
-  totalInvoiced: number;
-  totalPaid: number;
-  balance: number;
-  lastTransactionDate: string;
-}
-
-interface Supplier {
-  id: string;
-  name: string;
-  phoneNumber: string;
-  totalBilled: number;
-  totalPaid: number;
-  balance: number;
-  lastTransactionDate: string;
-}
+// Use Party interface directly since it already has all the needed properties
+type Customer = Party;
+type Supplier = Party;
 
 export default function DashboardScreen() {
   const [activeTab, setActiveTab] = useState<'transactions' | 'party'>('transactions');
@@ -177,6 +160,16 @@ export default function DashboardScreen() {
       const purchaseBills = await Storage.getObject<any[]>(STORAGE_KEYS.PURCHASE_BILLS);
       const purchasePayments = await Storage.getObject<any[]>(STORAGE_KEYS.PURCHASE_PAYMENTS);
       
+      console.log('Raw storage data:');
+      console.log('Sales invoices:', salesInvoices?.length || 0);
+      console.log('Purchase bills:', purchaseBills?.length || 0);
+      if (salesInvoices?.length) {
+        console.log('Sample invoice:', salesInvoices[0]);
+      }
+      if (purchaseBills?.length) {
+        console.log('Sample bill:', purchaseBills[0]);
+      }
+      
 
       
       // Combine all transactions
@@ -184,6 +177,7 @@ export default function DashboardScreen() {
 
       // Add sales invoices
       salesInvoices?.forEach(invoice => {
+        console.log('Loading invoice:', invoice.id, 'pdfUri:', invoice.pdfUri);
         allTransactions.push({
           id: invoice.id || '',
           type: 'sale',
@@ -212,6 +206,7 @@ export default function DashboardScreen() {
 
       // Add purchase bills
       purchaseBills?.forEach(bill => {
+        console.log('Loading bill:', bill.id, 'pdfUri:', bill.pdfUri);
         allTransactions.push({
           id: bill.id || '',
           type: 'purchase',
@@ -246,9 +241,18 @@ export default function DashboardScreen() {
         const dateB = new Date(b.date || '').getTime();
         return dateB - dateA;
       });
+      
+      console.log('Loaded transactions:', allTransactions.length);
+      allTransactions.forEach(t => {
+        if (t.type === 'sale' || t.type === 'purchase') {
+          console.log(`Transaction ${t.id} (${t.type}): pdfUri =`, t.pdfUri);
+        }
+      });
+      
       setTransactions(allTransactions);
+      console.log('Transactions state updated with', allTransactions.length, 'transactions');
     } catch (error) {
-      // Error loading dashboard data
+      console.error('Error loading dashboard data:', error);
     }
   };
 
@@ -280,12 +284,19 @@ export default function DashboardScreen() {
       );
     }
 
+    console.log('Filtered transactions:', filtered.length);
+    filtered.forEach(t => {
+      if (t.type === 'sale' || t.type === 'purchase') {
+        console.log(`Filtered transaction ${t.id} (${t.type}): pdfUri =`, t.pdfUri);
+      }
+    });
+
     setFilteredTransactions(filtered);
   };
 
   const loadCustomers = async () => {
     try {
-      const customersData = await CustomerManager.getAllCustomers();
+      const customersData = await PartyManager.getPartiesByType('customer');
       setCustomers(customersData);
     } catch (error) {
       // Error loading customers
@@ -307,7 +318,7 @@ export default function DashboardScreen() {
 
   const loadSuppliers = async () => {
     try {
-      const allSuppliers = await SupplierManager.getAllSuppliers();
+      const allSuppliers = await PartyManager.getPartiesByType('supplier');
       setSuppliers(allSuppliers);
     } catch (error) {
       console.error('Error loading suppliers:', error);
@@ -327,6 +338,7 @@ export default function DashboardScreen() {
 
   const sharePDF = async (transaction: Transaction) => {
     try {
+      console.log('Sharing PDF for transaction:', transaction.id, 'pdfUri:', transaction.pdfUri);
       if (!transaction.pdfUri) {
         Alert.alert('Error', 'PDF not found for this document');
         return;
@@ -349,14 +361,51 @@ export default function DashboardScreen() {
 
   const generateAndShareInvoicePDF = async (transaction: Transaction) => {
     try {
+      console.log('Generating invoice PDF for transaction:', transaction.id);
       // Find the corresponding sale invoice
       const saleInvoices = await Storage.getObject<any[]>(STORAGE_KEYS.SALES_INVOICES);
       const saleInvoice = saleInvoices?.find(invoice => invoice.id === transaction.id);
       
       if (saleInvoice) {
-        const success = await InvoicePdfGenerator.generateAndShareInvoice(saleInvoice);
-        if (!success) {
-          Alert.alert('Error', 'Failed to generate and share invoice PDF');
+        // Generate PDF and get the URI
+        const pdfUri = await InvoicePdfGenerator.generateInvoicePDF(saleInvoice);
+        console.log('Generated invoice PDF URI:', pdfUri);
+        
+        if (pdfUri) {
+          // Update the invoice with the PDF URI
+          saleInvoice.pdfUri = pdfUri;
+          
+          // Update the storage
+          const updatedInvoices = saleInvoices?.map(invoice => 
+            invoice.id === transaction.id ? saleInvoice : invoice
+          ) || [];
+          await Storage.setObject(STORAGE_KEYS.SALES_INVOICES, updatedInvoices);
+          console.log('Updated storage with invoice PDF URI:', pdfUri);
+          
+          // Small delay to ensure storage is persisted
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Reload dashboard data to ensure consistency
+          try {
+            await loadDashboardData();
+          } catch (error) {
+            console.error('Error reloading dashboard data:', error);
+          }
+          
+          // Share the PDF
+          console.log('About to share invoice PDF with URI:', pdfUri);
+          const isSharingAvailable = await Sharing.isAvailableAsync();
+          if (isSharingAvailable) {
+            await Sharing.shareAsync(pdfUri, {
+              mimeType: 'application/pdf',
+              dialogTitle: `Invoice #${saleInvoice.invoiceNo}`,
+            });
+            console.log('Invoice PDF shared successfully');
+          } else {
+            Alert.alert('Error', 'Sharing not available on this device');
+          }
+        } else {
+          Alert.alert('Error', 'Failed to generate invoice PDF');
         }
       } else {
         Alert.alert('Error', 'Sale invoice not found');
@@ -369,14 +418,51 @@ export default function DashboardScreen() {
 
   const generateAndSharePurchaseBillPDF = async (transaction: Transaction) => {
     try {
+      console.log('Generating purchase bill PDF for transaction:', transaction.id);
       // Find the corresponding purchase bill
       const purchaseBills = await Storage.getObject<any[]>(STORAGE_KEYS.PURCHASE_BILLS);
       const purchaseBill = purchaseBills?.find(bill => bill.id === transaction.id);
       
       if (purchaseBill) {
-        const success = await PurchaseBillPdfGenerator.generateAndSharePurchaseBill(purchaseBill);
-        if (!success) {
-          Alert.alert('Error', 'Failed to generate and share purchase bill PDF');
+        // Generate PDF and get the URI
+        const pdfUri = await PurchaseBillPdfGenerator.generatePurchaseBillPDF(purchaseBill);
+        console.log('Generated purchase bill PDF URI:', pdfUri);
+        
+        if (pdfUri) {
+          // Update the bill with the PDF URI
+          purchaseBill.pdfUri = pdfUri;
+          
+          // Update the storage
+          const updatedBills = purchaseBills?.map(bill => 
+            bill.id === transaction.id ? purchaseBill : bill
+          ) || [];
+          await Storage.setObject(STORAGE_KEYS.PURCHASE_BILLS, updatedBills);
+          console.log('Updated storage with purchase bill PDF URI:', pdfUri);
+          
+          // Small delay to ensure storage is persisted
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Reload dashboard data to ensure consistency
+          try {
+            await loadDashboardData();
+          } catch (error) {
+            console.error('Error reloading dashboard data:', error);
+          }
+          
+          // Share the PDF
+          console.log('About to share purchase bill PDF with URI:', pdfUri);
+          const isSharingAvailable = await Sharing.isAvailableAsync();
+          if (isSharingAvailable) {
+            await Sharing.shareAsync(pdfUri, {
+              mimeType: 'application/pdf',
+              dialogTitle: `Purchase Bill #${purchaseBill.billNo}`,
+            });
+            console.log('Purchase bill PDF shared successfully');
+          } else {
+            Alert.alert('Error', 'Sharing not available on this device');
+          }
+        } else {
+          Alert.alert('Error', 'Failed to generate purchase bill PDF');
         }
       } else {
         Alert.alert('Error', 'Purchase bill not found');
@@ -650,7 +736,9 @@ export default function DashboardScreen() {
     </TouchableOpacity>
   );
 
-  const TransactionItem = ({ transaction }: { transaction: Transaction }) => (
+  const TransactionItem = ({ transaction }: { transaction: Transaction }) => {
+    console.log('Rendering TransactionItem for:', transaction.id, 'type:', transaction.type, 'pdfUri:', transaction.pdfUri);
+    return (
     <TouchableOpacity 
       style={styles.transactionItem}
       onPress={() => navigateToTransaction(transaction)}
@@ -689,6 +777,7 @@ export default function DashboardScreen() {
             style={styles.actionIcon} 
             onPress={(e) => {
               e.stopPropagation();
+              console.log('Sharing existing invoice PDF for transaction:', transaction.id);
               sharePDF(transaction);
             }}
             activeOpacity={isAndroid ? 0.7 : 0.2}
@@ -704,6 +793,7 @@ export default function DashboardScreen() {
             style={styles.actionIcon} 
             onPress={(e) => {
               e.stopPropagation();
+              console.log('Generating new invoice PDF for transaction:', transaction.id);
               generateAndShareInvoicePDF(transaction);
             }}
             activeOpacity={isAndroid ? 0.7 : 0.2}
@@ -719,6 +809,7 @@ export default function DashboardScreen() {
             style={styles.actionIcon} 
             onPress={(e) => {
               e.stopPropagation();
+              console.log('Sharing existing purchase bill PDF for transaction:', transaction.id);
               sharePDF(transaction);
             }}
             activeOpacity={isAndroid ? 0.7 : 0.2}
@@ -734,6 +825,7 @@ export default function DashboardScreen() {
             style={styles.actionIcon} 
             onPress={(e) => {
               e.stopPropagation();
+              console.log('Generating new purchase bill PDF for transaction:', transaction.id);
               generateAndSharePurchaseBillPDF(transaction);
             }}
             activeOpacity={isAndroid ? 0.7 : 0.2}
@@ -774,7 +866,8 @@ export default function DashboardScreen() {
       
 
     </TouchableOpacity>
-  );
+    );
+  };
 
     const CustomerItem = ({ customer }: { customer: Customer }) => (
     <TouchableOpacity 
