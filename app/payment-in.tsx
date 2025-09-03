@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Colors } from '../constants/Colors';
 import { Party, PartyManager } from '../utils/partyManager';
-import { PaymentInPdfGenerator } from '../utils/paymentInPdfGenerator';
+import { BasePdfGenerator } from '../utils/basePdfGenerator';
 import { Storage, STORAGE_KEYS } from '../utils/storage';
 
 interface PaymentIn {
@@ -230,7 +230,7 @@ export default function PaymentInScreen() {
 
   const handleSharePDF = async (payment: PaymentIn) => {
     try {
-      const success = await PaymentInPdfGenerator.generateAndSharePaymentReceipt(payment);
+      const success = await BasePdfGenerator.generateAndSharePaymentReceipt(payment);
       if (!success) {
         Alert.alert('Error', 'Failed to generate and share PDF');
       }

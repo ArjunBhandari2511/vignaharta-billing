@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { CloudinaryUploader } from '../../utils/cloudinaryUpload';
-import { PurchaseBillPdfGenerator } from '../../utils/purchaseBillPdfGenerator';
+import { BasePdfGenerator } from '../../utils/basePdfGenerator';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
 import { Party, PartyManager } from '../../utils/partyManager';
 import { WASenderAPI } from '../../utils/wasenderApi';
@@ -272,7 +272,7 @@ export default function PurchaseScreen() {
     // Generate PDF in the background
     let pdfUri: string | undefined;
     try {
-      const generatedPdfUri = await PurchaseBillPdfGenerator.generatePurchaseBillPDF(newBill);
+      const generatedPdfUri = await BasePdfGenerator.generatePurchaseBillPDF(newBill);
       if (generatedPdfUri) {
         pdfUri = generatedPdfUri;
         newBill.pdfUri = pdfUri;

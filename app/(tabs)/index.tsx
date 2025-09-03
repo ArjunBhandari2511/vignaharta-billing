@@ -4,24 +4,23 @@ import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  FlatList,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    FlatList,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
-import { InvoicePdfGenerator } from '../../utils/invoicePdfGenerator';
+import { BasePdfGenerator } from '../../utils/basePdfGenerator';
 import { Party, PartyManager } from '../../utils/partyManager';
-import { PurchaseBillPdfGenerator } from '../../utils/purchaseBillPdfGenerator';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
 
 // Android-specific utilities
@@ -160,15 +159,7 @@ export default function DashboardScreen() {
       const purchaseBills = await Storage.getObject<any[]>(STORAGE_KEYS.PURCHASE_BILLS);
       const purchasePayments = await Storage.getObject<any[]>(STORAGE_KEYS.PURCHASE_PAYMENTS);
       
-      console.log('Raw storage data:');
-      console.log('Sales invoices:', salesInvoices?.length || 0);
-      console.log('Purchase bills:', purchaseBills?.length || 0);
-      if (salesInvoices?.length) {
-        console.log('Sample invoice:', salesInvoices[0]);
-      }
-      if (purchaseBills?.length) {
-        console.log('Sample bill:', purchaseBills[0]);
-      }
+
       
 
       
@@ -177,7 +168,6 @@ export default function DashboardScreen() {
 
       // Add sales invoices
       salesInvoices?.forEach(invoice => {
-        console.log('Loading invoice:', invoice.id, 'pdfUri:', invoice.pdfUri);
         allTransactions.push({
           id: invoice.id || '',
           type: 'sale',
@@ -206,7 +196,6 @@ export default function DashboardScreen() {
 
       // Add purchase bills
       purchaseBills?.forEach(bill => {
-        console.log('Loading bill:', bill.id, 'pdfUri:', bill.pdfUri);
         allTransactions.push({
           id: bill.id || '',
           type: 'purchase',
@@ -242,15 +231,7 @@ export default function DashboardScreen() {
         return dateB - dateA;
       });
       
-      console.log('Loaded transactions:', allTransactions.length);
-      allTransactions.forEach(t => {
-        if (t.type === 'sale' || t.type === 'purchase') {
-          console.log(`Transaction ${t.id} (${t.type}): pdfUri =`, t.pdfUri);
-        }
-      });
-      
       setTransactions(allTransactions);
-      console.log('Transactions state updated with', allTransactions.length, 'transactions');
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
@@ -283,13 +264,6 @@ export default function DashboardScreen() {
         transaction.customerName.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-
-    console.log('Filtered transactions:', filtered.length);
-    filtered.forEach(t => {
-      if (t.type === 'sale' || t.type === 'purchase') {
-        console.log(`Filtered transaction ${t.id} (${t.type}): pdfUri =`, t.pdfUri);
-      }
-    });
 
     setFilteredTransactions(filtered);
   };
@@ -338,7 +312,6 @@ export default function DashboardScreen() {
 
   const sharePDF = async (transaction: Transaction) => {
     try {
-      console.log('Sharing PDF for transaction:', transaction.id, 'pdfUri:', transaction.pdfUri);
       if (!transaction.pdfUri) {
         Alert.alert('Error', 'PDF not found for this document');
         return;
@@ -361,15 +334,13 @@ export default function DashboardScreen() {
 
   const generateAndShareInvoicePDF = async (transaction: Transaction) => {
     try {
-      console.log('Generating invoice PDF for transaction:', transaction.id);
       // Find the corresponding sale invoice
       const saleInvoices = await Storage.getObject<any[]>(STORAGE_KEYS.SALES_INVOICES);
       const saleInvoice = saleInvoices?.find(invoice => invoice.id === transaction.id);
       
       if (saleInvoice) {
         // Generate PDF and get the URI
-        const pdfUri = await InvoicePdfGenerator.generateInvoicePDF(saleInvoice);
-        console.log('Generated invoice PDF URI:', pdfUri);
+        const pdfUri = await BasePdfGenerator.generateInvoicePDF(saleInvoice);
         
         if (pdfUri) {
           // Update the invoice with the PDF URI
@@ -380,7 +351,6 @@ export default function DashboardScreen() {
             invoice.id === transaction.id ? saleInvoice : invoice
           ) || [];
           await Storage.setObject(STORAGE_KEYS.SALES_INVOICES, updatedInvoices);
-          console.log('Updated storage with invoice PDF URI:', pdfUri);
           
           // Small delay to ensure storage is persisted
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -393,14 +363,12 @@ export default function DashboardScreen() {
           }
           
           // Share the PDF
-          console.log('About to share invoice PDF with URI:', pdfUri);
           const isSharingAvailable = await Sharing.isAvailableAsync();
           if (isSharingAvailable) {
             await Sharing.shareAsync(pdfUri, {
               mimeType: 'application/pdf',
               dialogTitle: `Invoice #${saleInvoice.invoiceNo}`,
             });
-            console.log('Invoice PDF shared successfully');
           } else {
             Alert.alert('Error', 'Sharing not available on this device');
           }
@@ -418,26 +386,23 @@ export default function DashboardScreen() {
 
   const generateAndSharePurchaseBillPDF = async (transaction: Transaction) => {
     try {
-      console.log('Generating purchase bill PDF for transaction:', transaction.id);
       // Find the corresponding purchase bill
       const purchaseBills = await Storage.getObject<any[]>(STORAGE_KEYS.PURCHASE_BILLS);
       const purchaseBill = purchaseBills?.find(bill => bill.id === transaction.id);
       
       if (purchaseBill) {
         // Generate PDF and get the URI
-        const pdfUri = await PurchaseBillPdfGenerator.generatePurchaseBillPDF(purchaseBill);
-        console.log('Generated purchase bill PDF URI:', pdfUri);
+        const pdfUri = await BasePdfGenerator.generatePurchaseBillPDF(purchaseBill);
         
         if (pdfUri) {
           // Update the bill with the PDF URI
           purchaseBill.pdfUri = pdfUri;
           
           // Update the storage
-          const updatedBills = purchaseBills?.map(bill => 
-            bill.id === transaction.id ? purchaseBill : bill
+          const updatedBills = purchaseBills?.map(invoice => 
+            invoice.id === transaction.id ? purchaseBill : invoice
           ) || [];
           await Storage.setObject(STORAGE_KEYS.PURCHASE_BILLS, updatedBills);
-          console.log('Updated storage with purchase bill PDF URI:', pdfUri);
           
           // Small delay to ensure storage is persisted
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -450,14 +415,12 @@ export default function DashboardScreen() {
           }
           
           // Share the PDF
-          console.log('About to share purchase bill PDF with URI:', pdfUri);
           const isSharingAvailable = await Sharing.isAvailableAsync();
           if (isSharingAvailable) {
             await Sharing.shareAsync(pdfUri, {
               mimeType: 'application/pdf',
               dialogTitle: `Purchase Bill #${purchaseBill.billNo}`,
             });
-            console.log('Purchase bill PDF shared successfully');
           } else {
             Alert.alert('Error', 'Sharing not available on this device');
           }
@@ -737,7 +700,6 @@ export default function DashboardScreen() {
   );
 
   const TransactionItem = ({ transaction }: { transaction: Transaction }) => {
-    console.log('Rendering TransactionItem for:', transaction.id, 'type:', transaction.type, 'pdfUri:', transaction.pdfUri);
     return (
     <TouchableOpacity 
       style={styles.transactionItem}
@@ -777,7 +739,6 @@ export default function DashboardScreen() {
             style={styles.actionIcon} 
             onPress={(e) => {
               e.stopPropagation();
-              console.log('Sharing existing invoice PDF for transaction:', transaction.id);
               sharePDF(transaction);
             }}
             activeOpacity={isAndroid ? 0.7 : 0.2}
@@ -793,7 +754,6 @@ export default function DashboardScreen() {
             style={styles.actionIcon} 
             onPress={(e) => {
               e.stopPropagation();
-              console.log('Generating new invoice PDF for transaction:', transaction.id);
               generateAndShareInvoicePDF(transaction);
             }}
             activeOpacity={isAndroid ? 0.7 : 0.2}
@@ -809,7 +769,6 @@ export default function DashboardScreen() {
             style={styles.actionIcon} 
             onPress={(e) => {
               e.stopPropagation();
-              console.log('Sharing existing purchase bill PDF for transaction:', transaction.id);
               sharePDF(transaction);
             }}
             activeOpacity={isAndroid ? 0.7 : 0.2}
@@ -825,7 +784,6 @@ export default function DashboardScreen() {
             style={styles.actionIcon} 
             onPress={(e) => {
               e.stopPropagation();
-              console.log('Generating new purchase bill PDF for transaction:', transaction.id);
               generateAndSharePurchaseBillPDF(transaction);
             }}
             activeOpacity={isAndroid ? 0.7 : 0.2}

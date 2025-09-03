@@ -14,8 +14,8 @@ import {
   View,
 } from 'react-native';
 import { Colors } from '../constants/Colors';
+import { BasePdfGenerator } from '../utils/basePdfGenerator';
 import { Party, PartyManager } from '../utils/partyManager';
-import { PaymentOutPdfGenerator } from '../utils/paymentOutPdfGenerator';
 import { Storage, STORAGE_KEYS } from '../utils/storage';
 
 interface PaymentOut {
@@ -228,7 +228,7 @@ export default function PaymentOutScreen() {
 
   const handleSharePDF = async (payment: PaymentOut) => {
     try {
-      const success = await PaymentOutPdfGenerator.generateAndSharePaymentVoucher(payment);
+      const success = await BasePdfGenerator.generateAndSharePaymentVoucher(payment);
       if (!success) {
         Alert.alert('Error', 'Failed to generate and share PDF');
       }

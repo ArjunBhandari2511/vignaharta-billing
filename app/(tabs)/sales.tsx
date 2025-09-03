@@ -19,9 +19,9 @@ import {
   View,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
+import { BasePdfGenerator } from '../../utils/basePdfGenerator';
 import { CloudinaryUploader } from '../../utils/cloudinaryUpload';
 import { Party, PartyManager } from '../../utils/partyManager';
-import { InvoicePdfGenerator } from '../../utils/invoicePdfGenerator';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
 import { WASenderAPI } from '../../utils/wasenderApi';
 
@@ -269,7 +269,7 @@ export default function SalesScreen() {
     // Generate PDF in the background
     let pdfUri: string | undefined;
     try {
-      const generatedPdfUri = await InvoicePdfGenerator.generateInvoicePDF(newInvoice);
+      const generatedPdfUri = await BasePdfGenerator.generateInvoicePDF(newInvoice);
       if (generatedPdfUri) {
         pdfUri = generatedPdfUri;
         newInvoice.pdfUri = pdfUri;

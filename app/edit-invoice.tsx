@@ -280,8 +280,8 @@ export default function EditInvoiceScreen() {
 
     try {
       // Generate new PDF with updated invoice data
-      const { InvoicePdfGenerator } = await import('../utils/invoicePdfGenerator');
-      const pdfUri = await InvoicePdfGenerator.generateInvoicePDF(updatedInvoice);
+      const { BasePdfGenerator } = await import('../utils/basePdfGenerator');
+      const pdfUri = await BasePdfGenerator.generateInvoicePDF(updatedInvoice);
       if (pdfUri) {
         updatedInvoice.pdfUri = pdfUri;
       }

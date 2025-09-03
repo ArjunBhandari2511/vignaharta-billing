@@ -3,16 +3,16 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Colors } from '../constants/Colors';
 import { Storage, STORAGE_KEYS } from '../utils/storage';
@@ -26,6 +26,7 @@ interface PurchaseBill {
   totalAmount: number;
   date: string;
   status: 'pending' | 'completed' | 'cancelled';
+  pdfUri?: string;
 }
 
 interface PurchaseItem {
@@ -136,6 +137,13 @@ export default function EditPurchaseScreen() {
     };
 
     try {
+      // Generate new PDF with updated purchase bill data
+      const { BasePdfGenerator } = await import('../utils/basePdfGenerator');
+      const pdfUri = await BasePdfGenerator.generatePurchaseBillPDF(updatedBill);
+      if (pdfUri) {
+        updatedBill.pdfUri = pdfUri;
+      }
+
       const bills = await Storage.getObject<PurchaseBill[]>(STORAGE_KEYS.PURCHASE_BILLS);
       const updatedBills = bills?.map(b => 
         b.id === billId ? updatedBill : b
