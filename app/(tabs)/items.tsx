@@ -246,6 +246,16 @@ export default function ItemsScreen() {
       const createdItem = await itemsApi.create(newItemData);
       setItems(prevItems => [createdItem, ...prevItems]);
       
+      // Create opening stock transaction if opening stock > 0
+      if (openingStockBags > 0) {
+        try {
+          await StockManager.createOpeningStockTransaction(createdItem._id, createdItem.productName, openingStockBags);
+        } catch (stockError) {
+          console.error('Error creating opening stock transaction:', stockError);
+          // Don't fail the item creation if stock transaction fails
+        }
+      }
+      
       // Reset form
       setItemForm({
         productName: '',

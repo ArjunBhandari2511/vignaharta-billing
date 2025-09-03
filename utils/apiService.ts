@@ -201,4 +201,117 @@ export const pdfApi = {
   },
 };
 
+// Stock Transactions API service
+export const stockTransactionsApi = {
+  // Get all stock transactions
+  getAll: async () => {
+    const response = await apiClient.get('/stock-transactions');
+    return response.data;
+  },
+
+  // Get stock summary (current stock levels)
+  getStockSummary: async () => {
+    const response = await apiClient.get('/stock-transactions/summary');
+    return response.data;
+  },
+
+  // Get stock transactions for a specific item
+  getByItem: async (itemId: string) => {
+    const response = await apiClient.get(`/stock-transactions/item/${itemId}`);
+    return response.data;
+  },
+
+  // Get stock transactions by type
+  getByType: async (type: 'sale' | 'purchase' | 'adjustment' | 'opening_stock' | 'damage' | 'return' | 'transfer') => {
+    const response = await apiClient.get(`/stock-transactions/type/${type}`);
+    return response.data;
+  },
+
+  // Get stock transactions by date range
+  getByDateRange: async (startDate: string, endDate: string, itemId?: string) => {
+    const params = new URLSearchParams({
+      startDate,
+      endDate
+    });
+    if (itemId) {
+      params.append('itemId', itemId);
+    }
+    const response = await apiClient.get(`/stock-transactions/date-range?${params}`);
+    return response.data;
+  },
+
+  // Get stock transactions by reference
+  getByReference: async (referenceType: string, referenceId: string) => {
+    const response = await apiClient.get(`/stock-transactions/reference/${referenceType}/${referenceId}`);
+    return response.data;
+  },
+
+  // Get item stock history
+  getItemStockHistory: async (itemId: string, days: number = 30) => {
+    const response = await apiClient.get(`/stock-transactions/item/${itemId}/history?days=${days}`);
+    return response.data;
+  },
+
+  // Get stock movement summary
+  getStockMovementSummary: async (itemId: string, startDate: string, endDate: string) => {
+    const response = await apiClient.get(`/stock-transactions/movement-summary/${itemId}?startDate=${startDate}&endDate=${endDate}`);
+    return response.data;
+  },
+
+  // Create new stock transaction
+  create: async (transactionData: any) => {
+    const response = await apiClient.post('/stock-transactions', transactionData);
+    return response.data;
+  },
+
+  // Update stock transaction
+  update: async (id: string, transactionData: any) => {
+    const response = await apiClient.put(`/stock-transactions/${id}`, transactionData);
+    return response.data;
+  },
+
+  // Delete stock transaction
+  delete: async (id: string) => {
+    const response = await apiClient.delete(`/stock-transactions/${id}`);
+    return response.data;
+  },
+
+  // Reverse a stock transaction
+  reverse: async (id: string, reason: string) => {
+    const response = await apiClient.post(`/stock-transactions/${id}/reverse`, { reason });
+    return response.data;
+  },
+
+  // Get related transactions
+  getRelatedTransactions: async (id: string) => {
+    const response = await apiClient.get(`/stock-transactions/${id}/related`);
+    return response.data;
+  },
+
+  // Bulk create stock transactions
+  bulkCreate: async (transactions: any[]) => {
+    const response = await apiClient.post('/stock-transactions/bulk', { transactions });
+    return response.data;
+  },
+
+  // Get low stock alerts
+  getLowStockAlerts: async (threshold: number = 10) => {
+    const response = await apiClient.get(`/stock-transactions/low-stock?threshold=${threshold}`);
+    return response.data;
+  },
+
+  // Get stock valuation
+  getStockValuation: async (asOfDate?: string) => {
+    const params = asOfDate ? `?asOfDate=${asOfDate}` : '';
+    const response = await apiClient.get(`/stock-transactions/valuation${params}`);
+    return response.data;
+  },
+
+  // Export stock transactions
+  exportTransactions: async (filters: any, format: 'csv' | 'excel' = 'csv') => {
+    const response = await apiClient.post('/stock-transactions/export', { filters, format });
+    return response.data;
+  }
+};
+
 export default apiClient;
