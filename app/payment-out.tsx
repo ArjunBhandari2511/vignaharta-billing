@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Colors } from '../constants/Colors';
-import { BasePdfGenerator } from '../utils/basePdfGenerator';
+import { pdfApi } from '../utils/apiService';
 import { Party, PartyManager } from '../utils/partyManager';
 import { Storage, STORAGE_KEYS } from '../utils/storage';
 
@@ -226,15 +226,17 @@ export default function PaymentOutScreen() {
     }
   };
 
-  const handleSharePDF = async (payment: PaymentOut) => {
+    const handleSharePDF = async (payment: PaymentOut) => {
     try {
-      const success = await BasePdfGenerator.generateAndSharePaymentVoucher(payment);
-      if (!success) {
-        Alert.alert('Error', 'Failed to generate and share PDF');
+      const result = await pdfApi.generatePaymentVoucher(payment);
+      if (result.success) {
+        Alert.alert('Success', 'Payment voucher PDF generated successfully!');
+      } else {
+        Alert.alert('Error', 'Failed to generate PDF');
       }
     } catch (error) {
-      console.error('Error sharing PDF:', error);
-      Alert.alert('Error', 'Failed to share PDF');
+      console.error('Error generating PDF:', error);
+      Alert.alert('Error', 'Failed to generate PDF');
     }
   };
 
@@ -353,7 +355,7 @@ export default function PaymentOutScreen() {
                   <FlatList
                     data={filteredParties}
                     renderItem={renderPartySuggestion}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(item) => item._id} // Changed from item.id to item._id
                     scrollEnabled={false}
                     showsVerticalScrollIndicator={false}
                   />

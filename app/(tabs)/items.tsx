@@ -3,22 +3,23 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
-import { Storage, STORAGE_KEYS } from '../../utils/storage';
+import { itemsApi } from '../../utils/apiService';
 import { StockManager } from '../../utils/stockManager';
 
 // Android-specific utilities
@@ -39,7 +40,7 @@ const ANDROID_CONSTANTS = {
 };
 
 interface Item {
-  id: string;
+  _id: string;
   productName: string;
   category: 'Primary' | 'Kirana';
   purchasePrice: number;
@@ -60,6 +61,7 @@ export default function ItemsScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'Primary' | 'Kirana'>('Primary');
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [activeFilterOptions, setActiveFilterOptions] = useState({
     all: true,
     primary: false,
@@ -84,7 +86,7 @@ export default function ItemsScreen() {
 
   useEffect(() => {
     loadItems();
-    // Initialize Bardana universal item
+    // Initialize Bardana universal item if it doesn't exist
     StockManager.initializeBardana();
   }, []);
 
@@ -101,14 +103,18 @@ export default function ItemsScreen() {
 
   const loadItems = async () => {
     try {
-      const itemsData = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
-      if (itemsData) {
-        setItems(itemsData);
-      }
+      setLoading(true);
+      const itemsData = await itemsApi.getAll();
+      setItems(itemsData);
     } catch (error) {
       console.error('Error loading items:', error);
+      Alert.alert('Error', 'Failed to load items. Please check your connection.');
+    } finally {
+      setLoading(false);
     }
   };
+
+
 
   const filterItems = () => {
     let filtered = items;
@@ -226,8 +232,7 @@ export default function ItemsScreen() {
       return;
     }
 
-    const newItem: Item = {
-      id: Date.now().toString(),
+    const newItemData = {
       productName: itemForm.productName.trim(),
       category: itemForm.category,
       purchasePrice,
@@ -235,38 +240,34 @@ export default function ItemsScreen() {
       openingStock: openingStockBags, // Store in bags
       asOfDate: itemForm.asOfDate,
       lowStockAlert: lowStockAlertBags, // Store in bags
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     };
 
-    const updatedItems = [...items, newItem];
-    setItems(updatedItems);
-    
-    // Reset form
-    setItemForm({
-      productName: '',
-      category: 'Primary',
-      purchasePrice: '',
-      salePrice: '',
-      openingStock: '',
-      asOfDate: new Date().toISOString().split('T')[0],
-      lowStockAlert: '',
-    });
-    setShowCreateModal(false);
-    
-    // Save to storage
     try {
-      await Storage.setObject(STORAGE_KEYS.ITEMS, updatedItems);
+      const createdItem = await itemsApi.create(newItemData);
+      setItems(prevItems => [createdItem, ...prevItems]);
+      
+      // Reset form
+      setItemForm({
+        productName: '',
+        category: 'Primary',
+        purchasePrice: '',
+        salePrice: '',
+        openingStock: '',
+        asOfDate: new Date().toISOString().split('T')[0],
+        lowStockAlert: '',
+      });
+      setShowCreateModal(false);
+      
       Alert.alert('Success', 'Product created successfully!');
     } catch (error) {
-      console.error('Error saving item:', error);
-      Alert.alert('Error', 'Failed to save product. Please try again.');
+      console.error('Error creating item:', error);
+      Alert.alert('Error', 'Failed to create product. Please try again.');
     }
   };
 
   const handleDeleteItem = async (itemId: string, itemName: string) => {
     // Check if item is universal (cannot be deleted)
-    const itemToDelete = items.find(item => item.id === itemId);
+    const itemToDelete = items.find(item => item._id === itemId);
     if (itemToDelete?.isUniversal) {
       Alert.alert(
         'Cannot Delete Universal Item',
@@ -289,9 +290,8 @@ export default function ItemsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const updatedItems = items.filter(item => item.id !== itemId);
-              setItems(updatedItems);
-              await Storage.setObject(STORAGE_KEYS.ITEMS, updatedItems);
+              await itemsApi.delete(itemId);
+              setItems(prevItems => prevItems.filter(item => item._id !== itemId));
               Alert.alert('Success', 'Product deleted successfully!');
             } catch (error) {
               console.error('Error deleting item:', error);
@@ -306,7 +306,7 @@ export default function ItemsScreen() {
   const renderItem = ({ item }: { item: Item }) => (
     <TouchableOpacity 
       style={styles.itemCard}
-      onPress={() => router.push(`/edit-items?itemId=${item.id}`)}
+      onPress={() => router.push(`/edit-items?itemId=${item._id}`)}
       activeOpacity={0.7}
     >
       {/* Main Item Info Row */}
@@ -342,7 +342,7 @@ export default function ItemsScreen() {
             style={styles.editIcon}
             onPress={(e) => {
               e.stopPropagation();
-              router.push(`/edit-items?itemId=${item.id}`);
+              router.push(`/edit-items?itemId=${item._id}`);
             }}
           >
             <Ionicons name="pencil-outline" size={16} color={Colors.primary} />
@@ -352,10 +352,10 @@ export default function ItemsScreen() {
           {!item.isUniversal && (
             <TouchableOpacity
               style={styles.deleteIcon}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleDeleteItem(item.id, item.productName);
-              }}
+                          onPress={(e) => {
+              e.stopPropagation();
+              handleDeleteItem(item._id, item.productName);
+            }}
             >
               <Ionicons name="trash-outline" size={16} color={Colors.error} />
             </TouchableOpacity>
@@ -722,14 +722,19 @@ export default function ItemsScreen() {
            </TouchableOpacity>
          </View>
 
-        {/* Items List */}
+                {/* Items List */}
         <View style={styles.listContainer}>
           <Text style={styles.sectionTitle}>Products ({filteredItems.length})</Text>
-          {filteredItems.length > 0 ? (
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={styles.loadingText}>Loading products...</Text>
+            </View>
+          ) : filteredItems.length > 0 ? (
             <FlatList
               data={filteredItems}
               renderItem={renderItem}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item._id}
               scrollEnabled={false}
               showsVerticalScrollIndicator={false}
             />
@@ -1094,6 +1099,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    marginTop: 16,
   },
      modalOverlay: {
      flex: 1,

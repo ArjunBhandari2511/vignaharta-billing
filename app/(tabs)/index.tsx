@@ -4,22 +4,22 @@ import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
-import { BasePdfGenerator } from '../../utils/basePdfGenerator';
+import { pdfApi } from '../../utils/apiService';
 import { Party, PartyManager } from '../../utils/partyManager';
 import { StockManager } from '../../utils/stockManager';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
@@ -342,12 +342,12 @@ export default function DashboardScreen() {
       const saleInvoice = saleInvoices?.find(invoice => invoice.id === transaction.id);
       
       if (saleInvoice) {
-        // Generate PDF and get the URI
-        const pdfUri = await BasePdfGenerator.generateInvoicePDF(saleInvoice);
+        // Generate PDF and get the URI using backend API
+        const pdfResult = await pdfApi.generateInvoice(saleInvoice);
         
-        if (pdfUri) {
+        if (pdfResult.success) {
           // Update the invoice with the PDF URI
-          saleInvoice.pdfUri = pdfUri;
+          saleInvoice.pdfUri = pdfResult.data.filePath;
           
           // Update the storage
           const updatedInvoices = saleInvoices?.map(invoice => 
@@ -368,7 +368,7 @@ export default function DashboardScreen() {
           // Share the PDF
           const isSharingAvailable = await Sharing.isAvailableAsync();
           if (isSharingAvailable) {
-            await Sharing.shareAsync(pdfUri, {
+            await Sharing.shareAsync(pdfResult.data.filePath, {
               mimeType: 'application/pdf',
               dialogTitle: `Invoice #${saleInvoice.invoiceNo}`,
             });
@@ -394,12 +394,12 @@ export default function DashboardScreen() {
       const purchaseBill = purchaseBills?.find(bill => bill.id === transaction.id);
       
       if (purchaseBill) {
-        // Generate PDF and get the URI
-        const pdfUri = await BasePdfGenerator.generatePurchaseBillPDF(purchaseBill);
+        // Generate PDF and get the URI using backend API
+        const pdfResult = await pdfApi.generatePurchaseBill(purchaseBill);
         
-        if (pdfUri) {
+        if (pdfResult.success) {
           // Update the bill with the PDF URI
-          purchaseBill.pdfUri = pdfUri;
+          purchaseBill.pdfUri = pdfResult.data.filePath;
           
           // Update the storage
           const updatedBills = purchaseBills?.map(invoice => 
@@ -420,7 +420,7 @@ export default function DashboardScreen() {
           // Share the PDF
           const isSharingAvailable = await Sharing.isAvailableAsync();
           if (isSharingAvailable) {
-            await Sharing.shareAsync(pdfUri, {
+            await Sharing.shareAsync(pdfResult.data.filePath, {
               mimeType: 'application/pdf',
               dialogTitle: `Purchase Bill #${purchaseBill.billNo}`,
             });
@@ -1023,7 +1023,7 @@ export default function DashboardScreen() {
             <FlatList
               data={filteredTransactions.slice(0, 20)} // Show last 20 transactions
               renderItem={({ item }) => <TransactionItem transaction={item} />}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item.id} // Keep using id for transactions as they have both id and _id
               scrollEnabled={false}
               showsVerticalScrollIndicator={false}
             />
@@ -1088,7 +1088,7 @@ export default function DashboardScreen() {
               <FlatList
                 data={getFilteredParties()}
                 renderItem={({ item }) => <PartyItem party={item} />}
-                keyExtractor={(item) => `${item.type}-${item.data.id}`}
+                keyExtractor={(item) => `${item.type}-${item.data._id}`} // Changed from item.data.id to item.data._id
                 scrollEnabled={false}
                 showsVerticalScrollIndicator={false}
               />

@@ -1,50 +1,66 @@
-# Welcome to your Expo app 👋
+# Vignaharta Inventory Management
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+This is an Expo React Native application for inventory management with a Node.js backend.
 
-## Get started
+## Backend Integration
 
-1. Install dependencies
+The frontend has been updated to integrate with the backend API server.
 
+### Backend Requirements
+
+1. **Backend Server**: Must be running on `192.168.29.111:5000`
+2. **Database**: MongoDB with Mongoose
+3. **API Endpoints**: RESTful API for CRUD operations on items
+
+### Getting Started
+
+1. **Start the Backend Server**:
    ```bash
+   cd backend
    npm install
+   npm start
    ```
 
-2. Start the app
-
+2. **Start the Frontend**:
    ```bash
-   npx expo start
+   npm start
    ```
 
-In the output, you'll find options to open the app in a
+### API Endpoints
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- `GET /api/items` - Get all items
+- `GET /api/items/:id` - Get item by ID
+- `POST /api/items` - Create new item
+- `PUT /api/items/:id` - Update item
+- `DELETE /api/items/:id` - Delete item
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Item Data Structure
 
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```typescript
+interface Item {
+  _id: string;
+  productName: string;
+  category: 'Primary' | 'Kirana';
+  purchasePrice: number;
+  salePrice: number;
+  openingStock: number; // in bags
+  asOfDate: string;
+  lowStockAlert: number; // in bags
+  createdAt: string;
+  updatedAt: string;
+  isUniversal?: boolean;
+}
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Features
 
-## Learn more
+- ✅ Create Items (with validation)
+- ✅ Update Items (with validation)
+- ✅ Delete Items (with confirmation)
+- ✅ Real-time data from backend
+- ✅ Loading states and error handling
+- ✅ Search and filter functionality
 
-To learn more about developing your project with Expo, look at the following resources:
+### Network Configuration
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Make sure your device/emulator can reach the backend server at `192.168.29.111:5000`. If you're using a different IP address, update the `constants/Config.ts` file.

@@ -12,12 +12,13 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import { Colors } from '../constants/Colors';
-import { Storage, STORAGE_KEYS } from '../utils/storage';
+import { itemsApi } from '../utils/apiService';
 
 interface Item {
-  id: string;
+  _id: string;
   productName: string;
   category: 'Primary' | 'Kirana';
   purchasePrice: number;
@@ -56,8 +57,7 @@ export default function EditItemsScreen() {
   const loadItem = async () => {
     try {
       setLoading(true);
-      const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
-      const foundItem = items?.find(i => i.id === itemId);
+      const foundItem = await itemsApi.getById(itemId);
       
       if (foundItem) {
         setItem(foundItem);
@@ -125,27 +125,17 @@ export default function EditItemsScreen() {
     }
 
     try {
-      const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
-      if (!items) {
-        Alert.alert('Error', 'No items found');
-        return;
-      }
+      const updateData = {
+        productName: itemForm.productName.trim(),
+        category: itemForm.category,
+        purchasePrice,
+        salePrice,
+        openingStock: openingStock / 30, // Convert kg to bags
+        asOfDate: itemForm.asOfDate,
+        lowStockAlert: lowStockAlert / 30, // Convert kg to bags
+      };
 
-      const updatedItems = items.map(i => 
-        i.id === itemId ? {
-          ...i,
-          productName: itemForm.productName.trim(),
-          category: itemForm.category,
-          purchasePrice,
-          salePrice,
-          openingStock: openingStock / 30, // Convert kg to bags
-          asOfDate: itemForm.asOfDate,
-          lowStockAlert: lowStockAlert / 30, // Convert kg to bags
-          updatedAt: new Date().toISOString(),
-        } : i
-      );
-
-      await Storage.setObject(STORAGE_KEYS.ITEMS, updatedItems);
+      await itemsApi.update(itemId, updateData);
       
       Alert.alert('Success', 'Item updated successfully!');
       router.back();
@@ -166,11 +156,7 @@ export default function EditItemsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
-              if (!items) return;
-
-              const updatedItems = items.filter(i => i.id !== itemId);
-              await Storage.setObject(STORAGE_KEYS.ITEMS, updatedItems);
+              await itemsApi.delete(itemId);
               
               Alert.alert('Success', 'Item deleted successfully!');
               router.back();

@@ -2,20 +2,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { Colors } from '../constants/Colors';
+import { pdfApi } from '../utils/apiService';
 import { Party, PartyManager } from '../utils/partyManager';
-import { BasePdfGenerator } from '../utils/basePdfGenerator';
 import { Storage, STORAGE_KEYS } from '../utils/storage';
 
 interface PaymentIn {
@@ -230,13 +230,15 @@ export default function PaymentInScreen() {
 
   const handleSharePDF = async (payment: PaymentIn) => {
     try {
-      const success = await BasePdfGenerator.generateAndSharePaymentReceipt(payment);
-      if (!success) {
-        Alert.alert('Error', 'Failed to generate and share PDF');
+      const result = await pdfApi.generatePaymentReceipt(payment);
+      if (result.success) {
+        Alert.alert('Success', 'Payment receipt PDF generated successfully!');
+      } else {
+        Alert.alert('Error', 'Failed to generate PDF');
       }
     } catch (error) {
-      console.error('Error sharing PDF:', error);
-      Alert.alert('Error', 'Failed to share PDF');
+      console.error('Error generating PDF:', error);
+      Alert.alert('Error', 'Failed to generate PDF');
     }
   };
 
@@ -355,7 +357,7 @@ export default function PaymentInScreen() {
                   <FlatList
                     data={filteredParties}
                     renderItem={renderPartySuggestion}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(item) => item._id} // Changed from item.id to item._id
                     scrollEnabled={false}
                     showsVerticalScrollIndicator={false}
                   />

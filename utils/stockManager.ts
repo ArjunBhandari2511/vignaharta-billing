@@ -1,7 +1,8 @@
-import { Storage, STORAGE_KEYS } from './storage';
+
+import { itemsApi } from './apiService';
 
 interface Item {
-  id: string;
+  _id: string;
   productName: string;
   category: 'Primary' | 'Kirana';
   purchasePrice: number;
@@ -15,7 +16,7 @@ interface Item {
 }
 
 interface SaleItem {
-  id: string;
+  _id: string;
   itemName: string;
   quantity: number; // in kg
   rate: number;
@@ -31,49 +32,27 @@ export class StockManager {
    */
   static async initializeBardana(): Promise<void> {
     try {
-      const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
-      if (!items) {
-        // Create initial items array with Bardana
-        const bardanaItem: Item = {
-          id: 'bardana-universal',
-          productName: 'Bardana',
-          category: 'Primary',
-          purchasePrice: 0,
-          salePrice: 0,
-          openingStock: 0,
-          asOfDate: new Date().toISOString().split('T')[0],
-          lowStockAlert: 10,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          isUniversal: true,
-        };
-        
-        await Storage.setObject(STORAGE_KEYS.ITEMS, [bardanaItem]);
-        console.log('Bardana universal item created successfully');
-        return;
-      }
-
+      // Get all items from backend
+      const items = await itemsApi.getAll();
+      
       // Check if Bardana already exists
-      const bardanaExists = items.some(item => item.isUniversal && item.productName === 'Bardana');
+      const bardanaExists = items.some((item: Item) => item.isUniversal && item.productName === 'Bardana');
       
       if (!bardanaExists) {
-        const bardanaItem: Item = {
-          id: 'bardana-universal',
+        // Create Bardana item in backend
+        const bardanaItemData = {
           productName: 'Bardana',
-          category: 'Primary',
+          category: 'Primary' as 'Primary' | 'Kirana',
           purchasePrice: 0,
           salePrice: 0,
-          openingStock: 0,
+          openingStock: 0, // in bags
           asOfDate: new Date().toISOString().split('T')[0],
-          lowStockAlert: 10,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          lowStockAlert: 10, // in bags
           isUniversal: true,
         };
         
-        items.push(bardanaItem);
-        await Storage.setObject(STORAGE_KEYS.ITEMS, items);
-        console.log('Bardana universal item added to existing items');
+        await itemsApi.create(bardanaItemData);
+        console.log('Bardana universal item created successfully in backend');
       } else {
         console.log('Bardana universal item already exists');
       }
@@ -101,20 +80,20 @@ export class StockManager {
         return;
       }
 
-      // Load current items
-      const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
-      if (!items) {
+      // Load current items from backend
+      const items = await itemsApi.getAll();
+      if (!items || items.length === 0) {
         return;
       }
 
       console.log(`Updating stock for ${soldItems.length} sold items`);
-      soldItems.forEach(item => {
+      soldItems.forEach((item: SaleItem) => {
         console.log(`- ${item.itemName}: ${item.quantity} kg`);
       });
 
       // Create a map of sold items by name for quick lookup
       const soldItemsMap = new Map<string, number>();
-      soldItems.forEach(item => {
+      soldItems.forEach((item: SaleItem) => {
         const currentQty = soldItemsMap.get(item.itemName) || 0;
         soldItemsMap.set(item.itemName, currentQty + item.quantity);
       });
@@ -127,7 +106,7 @@ export class StockManager {
 
       // Calculate total Bardana reduction needed
       let totalBardanaReduction = 0;
-      soldItems.forEach(item => {
+      soldItems.forEach((item: SaleItem) => {
         // For each kg of item sold, reduce 1 kg of Bardana
         totalBardanaReduction += item.quantity;
       });
@@ -135,7 +114,7 @@ export class StockManager {
       console.log(`Total Bardana reduction needed: ${totalBardanaReduction} kg`);
 
       // Update stock for each item
-      const updatedItems = items.map(item => {
+      const updatedItems = items.map((item: Item) => {
         if (item.isUniversal && item.productName === 'Bardana') {
           // Reduce Bardana stock based on total items sold
           const bardanaReductionBags = totalBardanaReduction / 30; // Convert kg to bags
@@ -166,8 +145,21 @@ export class StockManager {
         return item;
       });
 
-      // Save updated items
-      await Storage.setObject(STORAGE_KEYS.ITEMS, updatedItems);
+      // Update items in backend one by one
+      for (const updatedItem of updatedItems) {
+        if (updatedItem._id) {
+          await itemsApi.update(updatedItem._id, {
+            productName: updatedItem.productName,
+            category: updatedItem.category,
+            purchasePrice: updatedItem.purchasePrice,
+            salePrice: updatedItem.salePrice,
+            openingStock: updatedItem.openingStock,
+            asOfDate: updatedItem.asOfDate,
+            lowStockAlert: updatedItem.lowStockAlert,
+            isUniversal: updatedItem.isUniversal,
+          });
+        }
+      }
 
       // Mark this invoice as processed if ID was provided
       if (invoiceId) {
@@ -192,18 +184,18 @@ export class StockManager {
         return;
       }
 
-      // Load current items
-      const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
-      if (!items) return;
+      // Load current items from backend
+      const items = await itemsApi.getAll();
+      if (!items || items.length === 0) return;
 
       console.log(`Updating stock for ${purchasedItems.length} purchased items`);
-      purchasedItems.forEach(item => {
+      purchasedItems.forEach((item: SaleItem) => {
         console.log(`- ${item.itemName}: ${item.quantity} kg`);
       });
 
       // Create a map of purchased items by name for quick lookup
       const purchasedItemsMap = new Map<string, number>();
-      purchasedItems.forEach(item => {
+      purchasedItems.forEach((item: SaleItem) => {
         const currentQty = purchasedItemsMap.get(item.itemName) || 0;
         purchasedItemsMap.set(item.itemName, currentQty + item.quantity);
       });
@@ -216,13 +208,13 @@ export class StockManager {
 
       // Calculate total Bardana addition needed
       let totalBardanaAddition = 0;
-      purchasedItems.forEach(item => {
+      purchasedItems.forEach((item: SaleItem) => {
         // For each kg of item purchased, add 1 kg of Bardana
         totalBardanaAddition += item.quantity;
       });
 
       // Update stock for each item
-      const updatedItems = items.map(item => {
+      const updatedItems = items.map((item: Item) => {
         if (item.isUniversal && item.productName === 'Bardana') {
           // Add Bardana stock based on total items purchased
           const bardanaAdditionBags = totalBardanaAddition / 30; // Convert kg to bags
@@ -251,8 +243,21 @@ export class StockManager {
         return item;
       });
 
-      // Save updated items
-      await Storage.setObject(STORAGE_KEYS.ITEMS, updatedItems);
+      // Update items in backend one by one
+      for (const updatedItem of updatedItems) {
+        if (updatedItem._id) {
+          await itemsApi.update(updatedItem._id, {
+            productName: updatedItem.productName,
+            category: updatedItem.category,
+            purchasePrice: updatedItem.purchasePrice,
+            salePrice: updatedItem.salePrice,
+            openingStock: updatedItem.openingStock,
+            asOfDate: updatedItem.asOfDate,
+            lowStockAlert: updatedItem.lowStockAlert,
+            isUniversal: updatedItem.isUniversal,
+          });
+        }
+      }
     } catch (error) {
       console.error('Error updating stock on purchase:', error);
       throw error;
@@ -265,13 +270,13 @@ export class StockManager {
    */
   static async revertStockOnSale(soldItems: SaleItem[]): Promise<void> {
     try {
-      // Load current items
-      const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
-      if (!items) return;
+      // Load current items from backend
+      const items = await itemsApi.getAll();
+      if (!items || items.length === 0) return;
 
       // Create a map of sold items by name for quick lookup
       const soldItemsMap = new Map<string, number>();
-      soldItems.forEach(item => {
+      soldItems.forEach((item: SaleItem) => {
         const currentQty = soldItemsMap.get(item.itemName) || 0;
         soldItemsMap.set(item.itemName, currentQty + item.quantity);
       });
@@ -284,13 +289,13 @@ export class StockManager {
 
       // Calculate total Bardana restoration needed
       let totalBardanaRestoration = 0;
-      soldItems.forEach(item => {
+      soldItems.forEach((item: SaleItem) => {
         // For each kg of item restored, restore 1 kg of Bardana
         totalBardanaRestoration += item.quantity;
       });
 
       // Revert stock for each item (add back the sold quantity)
-      const updatedItems = items.map(item => {
+      const updatedItems = items.map((item: Item) => {
         if (item.isUniversal && item.productName === 'Bardana') {
           // Restore Bardana stock based on total items restored
           const bardanaRestorationBags = totalBardanaRestoration / 30; // Convert kg to bags
@@ -319,8 +324,21 @@ export class StockManager {
         return item;
       });
 
-      // Save updated items
-      await Storage.setObject(STORAGE_KEYS.ITEMS, updatedItems);
+      // Update items in backend one by one
+      for (const updatedItem of updatedItems) {
+        if (updatedItem._id) {
+          await itemsApi.update(updatedItem._id, {
+            productName: updatedItem.productName,
+            category: updatedItem.category,
+            purchasePrice: updatedItem.purchasePrice,
+            salePrice: updatedItem.salePrice,
+            openingStock: updatedItem.openingStock,
+            asOfDate: updatedItem.asOfDate,
+            lowStockAlert: updatedItem.lowStockAlert,
+            isUniversal: updatedItem.isUniversal,
+          });
+        }
+      }
     } catch (error) {
       console.error('Error reverting stock on sale:', error);
       throw error;
@@ -334,10 +352,10 @@ export class StockManager {
    */
   static async getItemStock(itemName: string): Promise<number> {
     try {
-      const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
-      if (!items) return 0;
+      const items = await itemsApi.getAll();
+      if (!items || items.length === 0) return 0;
 
-      const item = items.find(i => i.productName === itemName);
+      const item = items.find((i: Item) => i.productName === itemName);
       if (!item) return 0;
 
       // Convert bags to kg (1 bag = 30 kg)

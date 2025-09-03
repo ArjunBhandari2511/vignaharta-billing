@@ -137,11 +137,11 @@ export default function EditPurchaseScreen() {
     };
 
     try {
-      // Generate new PDF with updated purchase bill data
-      const { BasePdfGenerator } = await import('../utils/basePdfGenerator');
-      const pdfUri = await BasePdfGenerator.generatePurchaseBillPDF(updatedBill);
-      if (pdfUri) {
-        updatedBill.pdfUri = pdfUri;
+      // Generate new PDF with updated purchase bill data using backend API
+      const { pdfApi } = await import('../utils/apiService');
+      const pdfResult = await pdfApi.generatePurchaseBill(updatedBill);
+      if (pdfResult.success) {
+        updatedBill.pdfUri = pdfResult.data.filePath;
       }
 
       const bills = await Storage.getObject<PurchaseBill[]>(STORAGE_KEYS.PURCHASE_BILLS);

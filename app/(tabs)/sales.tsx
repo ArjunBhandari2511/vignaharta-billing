@@ -19,8 +19,7 @@ import {
   View,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
-import { BasePdfGenerator } from '../../utils/basePdfGenerator';
-import { DocumentService } from '../../utils/documentService';
+import { pdfApi } from '../../utils/apiService';
 import { Party, PartyManager } from '../../utils/partyManager';
 import { StockManager } from '../../utils/stockManager';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
@@ -55,7 +54,7 @@ interface SaleInvoice {
 }
 
 interface SaleItem {
-  id: string;
+  _id: string; // Changed from 'id' to '_id' to match StockManager interface
   itemName: string;
   quantity: number;
   rate: number;
@@ -191,7 +190,11 @@ export default function SalesScreen() {
 
   const updateInvoiceItem = (index: number, field: keyof SaleItem, value: any) => {
     const updatedItems = [...invoiceForm.items];
-    updatedItems[index] = { ...updatedItems[index], [field]: value };
+    updatedItems[index] = { 
+      ...updatedItems[index], 
+      [field]: value,
+      _id: updatedItems[index]._id || Date.now().toString(), // Ensure _id exists
+    };
     
     // Calculate total for this item
     if (field === 'quantity' || field === 'rate') {
@@ -260,24 +263,24 @@ export default function SalesScreen() {
       invoiceNo: generatedInvoiceNo,
       customerName: invoiceForm.customerName,
       phoneNumber: invoiceForm.phoneNumber,
-      items: invoiceForm.items,
+      items: invoiceForm.items.map(item => ({
+        ...item,
+        _id: item._id || Date.now().toString(), // Ensure _id exists
+      })),
       totalAmount: calculateInvoiceTotal(),
       date: new Date().toLocaleDateString(),
       status: 'pending',
     };
 
-    // Generate PDF in the background
+    // Generate PDF in the background using backend API
     let pdfUri: string | undefined;
     try {
-      const generatedPdfUri = await BasePdfGenerator.generateInvoicePDF(newInvoice);
-      if (generatedPdfUri) {
-        pdfUri = generatedPdfUri;
+      const pdfResult = await pdfApi.generateInvoice(newInvoice);
+      if (pdfResult.success) {
+        pdfUri = pdfResult.data.filePath;
         newInvoice.pdfUri = pdfUri;
-        
-        // Add a small delay to ensure file is fully written
-        await new Promise(resolve => setTimeout(resolve, 1000));
       } else {
-        console.error('PDF generation returned null');
+        console.error('PDF generation failed:', pdfResult.error);
       }
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -294,8 +297,15 @@ export default function SalesScreen() {
     try {
       await Storage.setObject(STORAGE_KEYS.SALES_INVOICES, updatedInvoices);
       
-      // Update stock levels when items are sold
-      await StockManager.updateStockOnSale(newInvoice.items, newInvoice.id);
+      // Update stock levels when items are sold - convert items to match StockManager interface
+      const stockItems = newInvoice.items.map(item => ({
+        _id: item._id,
+        itemName: item.itemName,
+        quantity: item.quantity,
+        rate: item.rate,
+        total: item.total,
+      }));
+      await StockManager.updateStockOnSale(stockItems, newInvoice.id);
       
       // Trigger balance recalculation
       await Storage.setObject('LAST_TRANSACTION_UPDATE', Date.now().toString());
@@ -312,35 +322,13 @@ export default function SalesScreen() {
 
   const sendInvoiceViaWhatsApp = async (invoice: SaleInvoice, pdfUri?: string) => {
     try {
-      // Validate phone number
-      if (!DocumentService.validatePhoneNumber(invoice.phoneNumber)) {
-        console.warn('Invalid phone number format:', invoice.phoneNumber);
-        return;
-      }
-
-      const formattedPhone = DocumentService.formatPhoneNumber(invoice.phoneNumber);
-      
-      let documentUrl: string | undefined;
-      
-      // Upload PDF to Cloudinary if available
-      if (pdfUri) {
-        const uploadResult = await DocumentService.uploadInvoicePdf(pdfUri, invoice.invoiceNo);
-        
-        if (uploadResult.success && uploadResult.url) {
-          documentUrl = uploadResult.url;
-        } else {
-          console.error('Failed to upload PDF:', uploadResult.error);
-        }
-      }
-      
-      // Send invoice via WhatsApp (with document if available)
-      const response = await DocumentService.sendInvoice(
-        formattedPhone,
+      // Use the new combined workflow API
+      const response = await pdfApi.generateAndSendInvoice(
+        invoice,
+        invoice.phoneNumber,
         invoice.customerName,
-        invoice.invoiceNo,
         invoice.totalAmount,
-        invoice.date,
-        documentUrl // Pass the Cloudinary URL if available
+        invoice.date
       );
       
       if (!response.success) {
@@ -500,7 +488,7 @@ export default function SalesScreen() {
                       >
                         {matchingCustomers.map((customer) => (
                       <TouchableOpacity
-                        key={customer.id}
+                        key={customer._id} // Changed from customer.id to customer._id
                         style={styles.suggestionItem}
                         onPress={() => {
                           setInvoiceForm(prev => ({
@@ -530,7 +518,7 @@ export default function SalesScreen() {
                       // Show first 3 customers without scroll when 3 or fewer
                       matchingCustomers.slice(0, 3).map((customer) => (
                         <TouchableOpacity
-                          key={customer.id}
+                          key={customer._id} // Changed from customer.id to customer._id
                           style={styles.suggestionItem}
                           onPress={() => {
                             setInvoiceForm(prev => ({
@@ -599,7 +587,7 @@ export default function SalesScreen() {
             <FlatList
               data={invoiceForm.items}
               renderItem={renderInvoiceItem}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item._id} // Changed from item.id to item._id
               scrollEnabled={false}
             />
             

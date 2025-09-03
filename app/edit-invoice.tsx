@@ -3,16 +3,16 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Colors } from '../constants/Colors';
 import { Party, PartyManager } from '../utils/partyManager';
@@ -279,11 +279,11 @@ export default function EditInvoiceScreen() {
     };
 
     try {
-      // Generate new PDF with updated invoice data
-      const { BasePdfGenerator } = await import('../utils/basePdfGenerator');
-      const pdfUri = await BasePdfGenerator.generateInvoicePDF(updatedInvoice);
-      if (pdfUri) {
-        updatedInvoice.pdfUri = pdfUri;
+      // Generate new PDF with updated invoice data using backend API
+      const { pdfApi } = await import('../utils/apiService');
+      const pdfResult = await pdfApi.generateInvoice(updatedInvoice);
+      if (pdfResult.success) {
+        updatedInvoice.pdfUri = pdfResult.data.filePath;
       }
 
       const invoices = await Storage.getObject<SaleInvoice[]>(STORAGE_KEYS.SALES_INVOICES);
@@ -539,7 +539,7 @@ export default function EditInvoiceScreen() {
                 <View style={styles.customerSuggestions}>
                   {matchingCustomers.slice(0, 3).map((customer) => (
                     <TouchableOpacity
-                      key={customer.id}
+                      key={customer._id} // Changed from customer.id to customer._id
                       style={styles.suggestionItem}
                       onPress={() => {
                         setFormData(prev => ({

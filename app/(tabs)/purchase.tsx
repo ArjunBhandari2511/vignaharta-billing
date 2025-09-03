@@ -3,27 +3,26 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Dimensions,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
-import { BasePdfGenerator } from '../../utils/basePdfGenerator';
+import { pdfApi } from '../../utils/apiService';
 import { Party, PartyManager } from '../../utils/partyManager';
 import { StockManager } from '../../utils/stockManager';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
-import { DocumentService } from '../../utils/documentService';
 
 // Android-specific utilities
 const isAndroid = Platform.OS === 'android';
@@ -55,7 +54,16 @@ interface PurchaseBill {
 }
 
 interface PurchaseItem {
-  id: string;
+  _id: string; // Changed from 'id' to '_id' to match StockManager interface
+  itemName: string;
+  quantity: number;
+  rate: number;
+  total: number;
+}
+
+// Interface for stock manager compatibility
+interface StockItem {
+  _id: string;
   itemName: string;
   quantity: number;
   rate: number;
@@ -195,7 +203,11 @@ export default function PurchaseScreen() {
   const updateBillItem = (index: number, field: keyof PurchaseItem, value: any) => {
     setBillForm(prev => {
       const updatedItems = [...prev.items];
-      updatedItems[index] = { ...updatedItems[index], [field]: value };
+      updatedItems[index] = { 
+        ...updatedItems[index], 
+        [field]: value,
+        _id: updatedItems[index]._id || Date.now().toString(), // Ensure _id exists
+      };
       
       // Recalculate total for this item
       if (field === 'quantity' || field === 'rate') {
@@ -263,24 +275,24 @@ export default function PurchaseScreen() {
       billNo: generatedBillNo,
       supplierName: billForm.supplierName,
       phoneNumber: billForm.phoneNumber,
-      items: billForm.items,
+      items: billForm.items.map(item => ({
+        ...item,
+        _id: item._id || Date.now().toString(), // Ensure _id exists
+      })),
       totalAmount: calculateBillTotal(),
       date: new Date().toLocaleDateString(),
       status: 'pending',
     };
 
-    // Generate PDF in the background
+    // Generate PDF in the background using backend API
     let pdfUri: string | undefined;
     try {
-      const generatedPdfUri = await BasePdfGenerator.generatePurchaseBillPDF(newBill);
-      if (generatedPdfUri) {
-        pdfUri = generatedPdfUri;
+      const pdfResult = await pdfApi.generatePurchaseBill(newBill);
+      if (pdfResult.success) {
+        pdfUri = pdfResult.data.filePath;
         newBill.pdfUri = pdfUri;
-        
-        // Add a small delay to ensure file is fully written
-        await new Promise(resolve => setTimeout(resolve, 1000));
       } else {
-        console.error('PDF generation returned null');
+        console.error('PDF generation failed:', pdfResult.error);
       }
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -297,8 +309,15 @@ export default function PurchaseScreen() {
     try {
       await Storage.setObject(STORAGE_KEYS.PURCHASE_BILLS, updatedBills);
       
-      // Update stock levels when items are purchased
-      await StockManager.updateStockOnPurchase(newBill.items);
+      // Update stock levels when items are purchased - convert items to match StockManager interface
+      const stockItems: StockItem[] = newBill.items.map(item => ({
+        _id: item._id,
+        itemName: item.itemName,
+        quantity: item.quantity,
+        rate: item.rate,
+        total: item.total,
+      }));
+      await StockManager.updateStockOnPurchase(stockItems);
       
       // Trigger balance recalculation
       await Storage.setObject('LAST_TRANSACTION_UPDATE', Date.now().toString());
@@ -315,35 +334,13 @@ export default function PurchaseScreen() {
 
   const sendBillViaWhatsApp = async (bill: PurchaseBill, pdfUri?: string) => {
     try {
-      // Validate phone number
-      if (!DocumentService.validatePhoneNumber(bill.phoneNumber)) {
-        console.warn('Invalid phone number format:', bill.phoneNumber);
-        return;
-      }
-
-      const formattedPhone = DocumentService.formatPhoneNumber(bill.phoneNumber);
-      
-      let documentUrl: string | undefined;
-      
-      // Upload PDF to Cloudinary if available
-      if (pdfUri) {
-        const uploadResult = await DocumentService.uploadPurchaseBillPdf(pdfUri, bill.billNo);
-        
-        if (uploadResult.success && uploadResult.url) {
-          documentUrl = uploadResult.url;
-        } else {
-          console.error('Failed to upload PDF:', uploadResult.error);
-        }
-      }
-      
-      // Send bill via WhatsApp (with document if available)
-      const response = await DocumentService.sendPurchaseBill(
-        formattedPhone,
+      // Use the new combined workflow API
+      const response = await pdfApi.generateAndSendPurchaseBill(
+        bill,
+        bill.phoneNumber,
         bill.supplierName,
-        bill.billNo,
         bill.totalAmount,
-        bill.date,
-        documentUrl // Pass the Cloudinary URL if available
+        bill.date
       );
       
       if (!response.success) {
@@ -484,7 +481,7 @@ export default function PurchaseScreen() {
                       >
                         {filteredSuppliers.map((supplier) => (
                           <TouchableOpacity
-                            key={supplier.id}
+                            key={supplier._id} // Changed from supplier.id to supplier._id
                             style={styles.suggestionItem}
                             onPress={() => {
                               setBillForm(prev => ({
@@ -510,7 +507,7 @@ export default function PurchaseScreen() {
                       // Show first 3 suppliers without scroll when 3 or fewer
                       filteredSuppliers.slice(0, 3).map((supplier) => (
                         <TouchableOpacity
-                          key={supplier.id}
+                          key={supplier._id} // Changed from supplier.id to supplier._id
                           style={styles.suggestionItem}
                           onPress={() => {
                             setBillForm(prev => ({
@@ -558,7 +555,7 @@ export default function PurchaseScreen() {
             <FlatList
               data={billForm.items}
               renderItem={renderBillItem}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item._id} // Changed from item.id to item._id
               scrollEnabled={false}
             />
             
