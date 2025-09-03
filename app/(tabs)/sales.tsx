@@ -295,7 +295,7 @@ export default function SalesScreen() {
       await Storage.setObject(STORAGE_KEYS.SALES_INVOICES, updatedInvoices);
       
       // Update stock levels when items are sold
-      await StockManager.updateStockOnSale(newInvoice.items);
+      await StockManager.updateStockOnSale(newInvoice.items, newInvoice.id);
       
       // Trigger balance recalculation
       await Storage.setObject('LAST_TRANSACTION_UPDATE', Date.now().toString());

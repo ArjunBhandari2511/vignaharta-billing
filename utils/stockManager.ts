@@ -23,6 +23,9 @@ interface SaleItem {
 }
 
 export class StockManager {
+  // Track processed invoices to prevent duplicate stock updates
+  private static processedInvoices = new Set<string>();
+
   /**
    * Initialize the universal Bardana item if it doesn't exist
    */
@@ -82,20 +85,44 @@ export class StockManager {
   /**
    * Update stock levels when items are sold
    * @param soldItems Array of items that were sold
+   * @param invoiceId Optional invoice ID to prevent duplicate processing
    */
-  static async updateStockOnSale(soldItems: SaleItem[]): Promise<void> {
+  static async updateStockOnSale(soldItems: SaleItem[], invoiceId?: string): Promise<void> {
     try {
+      // Validate input
+      if (!soldItems || soldItems.length === 0) {
+        console.log('No items to update stock for');
+        return;
+      }
+
+      // Check if this invoice has already been processed
+      if (invoiceId && this.processedInvoices.has(invoiceId)) {
+        console.log(`Invoice ${invoiceId} has already been processed for stock update`);
+        return;
+      }
+
       // Load current items
       const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
       if (!items) {
         return;
       }
 
+      console.log(`Updating stock for ${soldItems.length} sold items`);
+      soldItems.forEach(item => {
+        console.log(`- ${item.itemName}: ${item.quantity} kg`);
+      });
+
       // Create a map of sold items by name for quick lookup
       const soldItemsMap = new Map<string, number>();
       soldItems.forEach(item => {
         const currentQty = soldItemsMap.get(item.itemName) || 0;
         soldItemsMap.set(item.itemName, currentQty + item.quantity);
+      });
+
+      // Log consolidated quantities for debugging
+      console.log('Consolidated quantities by item:');
+      soldItemsMap.forEach((quantity, itemName) => {
+        console.log(`- ${itemName}: ${quantity} kg total`);
       });
 
       // Calculate total Bardana reduction needed
@@ -141,6 +168,12 @@ export class StockManager {
 
       // Save updated items
       await Storage.setObject(STORAGE_KEYS.ITEMS, updatedItems);
+
+      // Mark this invoice as processed if ID was provided
+      if (invoiceId) {
+        this.processedInvoices.add(invoiceId);
+        console.log(`Invoice ${invoiceId} marked as processed for stock update`);
+      }
     } catch (error) {
       console.error('Error updating stock on sale:', error);
       throw error;
@@ -153,15 +186,32 @@ export class StockManager {
    */
   static async updateStockOnPurchase(purchasedItems: SaleItem[]): Promise<void> {
     try {
+      // Validate input
+      if (!purchasedItems || purchasedItems.length === 0) {
+        console.log('No items to update stock for');
+        return;
+      }
+
       // Load current items
       const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
       if (!items) return;
+
+      console.log(`Updating stock for ${purchasedItems.length} purchased items`);
+      purchasedItems.forEach(item => {
+        console.log(`- ${item.itemName}: ${item.quantity} kg`);
+      });
 
       // Create a map of purchased items by name for quick lookup
       const purchasedItemsMap = new Map<string, number>();
       purchasedItems.forEach(item => {
         const currentQty = purchasedItemsMap.get(item.itemName) || 0;
         purchasedItemsMap.set(item.itemName, currentQty + item.quantity);
+      });
+
+      // Log consolidated quantities for debugging
+      console.log('Consolidated quantities by item:');
+      purchasedItemsMap.forEach((quantity, itemName) => {
+        console.log(`- ${itemName}: ${quantity} kg total`);
       });
 
       // Calculate total Bardana addition needed
@@ -224,6 +274,12 @@ export class StockManager {
       soldItems.forEach(item => {
         const currentQty = soldItemsMap.get(item.itemName) || 0;
         soldItemsMap.set(item.itemName, currentQty + item.quantity);
+      });
+
+      // Log consolidated quantities for debugging
+      console.log('Consolidated quantities by item for reversion:');
+      soldItemsMap.forEach((quantity, itemName) => {
+        console.log(`- ${itemName}: ${quantity} kg total to restore`);
       });
 
       // Calculate total Bardana restoration needed
@@ -301,5 +357,47 @@ export class StockManager {
   static async hasSufficientStock(itemName: string, requiredQuantity: number): Promise<boolean> {
     const currentStock = await this.getItemStock(itemName);
     return currentStock >= requiredQuantity;
+  }
+
+  /**
+   * Clear processed invoices tracking (useful for app restart or testing)
+   */
+  static clearProcessedInvoices(): void {
+    this.processedInvoices.clear();
+    console.log('Processed invoices tracking cleared');
+  }
+
+  /**
+   * Check if an invoice has been processed for stock update
+   * @param invoiceId Invoice ID to check
+   * @returns True if invoice has been processed
+   */
+  static isInvoiceProcessed(invoiceId: string): boolean {
+    return this.processedInvoices.has(invoiceId);
+  }
+
+  /**
+   * Remove an invoice from processed list (useful for testing or reprocessing)
+   * @param invoiceId Invoice ID to remove
+   */
+  static removeProcessedInvoice(invoiceId: string): void {
+    this.processedInvoices.delete(invoiceId);
+    console.log(`Invoice ${invoiceId} removed from processed list`);
+  }
+
+  /**
+   * Get count of processed invoices (useful for debugging)
+   * @returns Number of processed invoices
+   */
+  static getProcessedInvoicesCount(): number {
+    return this.processedInvoices.size;
+  }
+
+  /**
+   * Get all processed invoice IDs (useful for debugging)
+   * @returns Array of processed invoice IDs
+   */
+  static getProcessedInvoiceIds(): string[] {
+    return Array.from(this.processedInvoices);
   }
 }

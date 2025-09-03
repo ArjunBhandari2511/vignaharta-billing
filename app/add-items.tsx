@@ -208,14 +208,10 @@ export default function AddItemsScreen() {
       
       await Storage.setObject(storageKey, billItems);
       
-      // Update stock levels immediately based on mode
-      if (itemMode === 'sales') {
-        await StockManager.updateStockOnSale(billItems);
-      } else {
-        await StockManager.updateStockOnPurchase(billItems);
-      }
+      // Note: Stock levels will be updated when the invoice is actually created
+      // We don't update stock here as this is just adding items to a draft invoice
       
-      // Reload items to reflect updated stock
+      // Reload items to reflect current stock (no changes yet)
       await loadItems();
       
       // Small delay to ensure storage is properly set before navigation
