@@ -21,6 +21,7 @@ import {
 import { Colors } from '../../constants/Colors';
 import { BasePdfGenerator } from '../../utils/basePdfGenerator';
 import { Party, PartyManager } from '../../utils/partyManager';
+import { StockManager } from '../../utils/stockManager';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
 
 // Android-specific utilities
@@ -103,6 +104,8 @@ export default function DashboardScreen() {
     loadCustomers();
     loadSuppliers();
     loadCompanyDetails();
+    // Initialize Bardana universal item
+    StockManager.initializeBardana();
   }, []);
 
   // Refresh data when screen comes into focus

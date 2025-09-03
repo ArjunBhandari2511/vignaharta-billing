@@ -27,6 +27,7 @@ interface Item {
   lowStockAlert: number; // in bags
   createdAt: string;
   updatedAt: string;
+  isUniversal?: boolean; // Flag to identify universal items like Bardana
 }
 
 export default function EditItemsScreen() {
@@ -226,24 +227,38 @@ export default function EditItemsScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Item</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleDeleteItem} style={styles.deleteButton}>
-            <Ionicons name="trash-outline" size={20} color={Colors.error} />
-          </TouchableOpacity>
+          {/* Only show delete button for non-universal items */}
+          {!item.isUniversal && (
+            <TouchableOpacity onPress={handleDeleteItem} style={styles.deleteButton}>
+              <Ionicons name="trash-outline" size={20} color={Colors.error} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Universal Item Warning */}
+        {item.isUniversal && (
+          <View style={styles.universalWarning}>
+            <Ionicons name="shield-checkmark" size={20} color={Colors.primary} />
+            <Text style={styles.universalWarningText}>
+              This is a universal item. Core properties cannot be modified.
+            </Text>
+          </View>
+        )}
+
         {/* Form Section */}
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Product Details</Text>
           
           <Text style={styles.fieldLabel}>Product Name *</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, item.isUniversal && styles.disabledInput]}
             placeholder="Enter product name..."
             placeholderTextColor={Colors.textTertiary}
             value={itemForm.productName}
             onChangeText={(text) => setItemForm(prev => ({ ...prev, productName: text }))}
+            editable={!item.isUniversal}
           />
           
           <Text style={styles.fieldLabel}>Product Category *</Text>
@@ -251,13 +266,16 @@ export default function EditItemsScreen() {
             <TouchableOpacity
               style={[
                 styles.categoryOption,
-                itemForm.category === 'Primary' && styles.categoryOptionSelected
+                itemForm.category === 'Primary' && styles.categoryOptionSelected,
+                item.isUniversal && styles.disabledCategoryOption
               ]}
-              onPress={() => setItemForm(prev => ({ ...prev, category: 'Primary' }))}
+              onPress={() => !item.isUniversal && setItemForm(prev => ({ ...prev, category: 'Primary' }))}
+              disabled={item.isUniversal}
             >
               <Text style={[
                 styles.categoryOptionText,
-                itemForm.category === 'Primary' && styles.categoryOptionTextSelected
+                itemForm.category === 'Primary' && styles.categoryOptionTextSelected,
+                item.isUniversal && styles.disabledCategoryOptionText
               ]}>
                 Primary
               </Text>
@@ -265,13 +283,16 @@ export default function EditItemsScreen() {
             <TouchableOpacity
               style={[
                 styles.categoryOption,
-                itemForm.category === 'Kirana' && styles.categoryOptionSelected
+                itemForm.category === 'Kirana' && styles.categoryOptionSelected,
+                item.isUniversal && styles.disabledCategoryOption
               ]}
-              onPress={() => setItemForm(prev => ({ ...prev, category: 'Kirana' }))}
+              onPress={() => !item.isUniversal && setItemForm(prev => ({ ...prev, category: 'Kirana' }))}
+              disabled={item.isUniversal}
             >
               <Text style={[
                 styles.categoryOptionText,
-                itemForm.category === 'Kirana' && styles.categoryOptionTextSelected
+                itemForm.category === 'Kirana' && styles.categoryOptionTextSelected,
+                item.isUniversal && styles.disabledCategoryOptionText
               ]}>
                 Kirana
               </Text>
@@ -493,5 +514,34 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: Colors.error,
+  },
+  universalWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary + '15',
+    padding: 16,
+    margin: 20,
+    marginBottom: 0,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
+  },
+  universalWarningText: {
+    fontSize: 14,
+    color: Colors.primary,
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  disabledInput: {
+    backgroundColor: Colors.surface + '80',
+    color: Colors.textTertiary,
+    borderColor: Colors.border + '80',
+  },
+  disabledCategoryOption: {
+    backgroundColor: Colors.surface + '80',
+    borderColor: Colors.border + '80',
+  },
+  disabledCategoryOptionText: {
+    color: Colors.textTertiary,
   },
 });

@@ -3,14 +3,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    FlatList,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/Colors';
 import { StockManager } from '../utils/stockManager';
@@ -148,7 +148,7 @@ export default function AddItemsScreen() {
           
           if (weight > availableStockKg) {
             Alert.alert('Insufficient Stock', 
-              `${selectedItem.productName} only has ${availableStockKg.toFixed(2)} kg available. You cannot sell more than available stock.`);
+              `${selectedItem.productName} only has ${Math.round(availableStockKg)} kg available. You cannot sell more than available stock.`);
             return;
           }
         }
@@ -240,7 +240,7 @@ export default function AddItemsScreen() {
         <Text style={styles.dropdownItemName}>{item.productName}</Text>
         <Text style={styles.dropdownItemStock}>
           {itemMode === 'sales' 
-            ? `Stock: ${item.openingStock.toFixed(2)} bags (${Math.round(item.openingStock * 30)} kg)`
+            ? `Stock: ${Math.round(item.openingStock)} bags (${Math.round(item.openingStock * 30)} kg)`
             : `Price: ₹${item.purchasePrice}/kg`
           }
         </Text>
@@ -276,7 +276,7 @@ export default function AddItemsScreen() {
           
           <View style={styles.priceContainer}>
             <Text style={styles.inputLabel}>Price (₹/kg)</Text>
-            <Text style={styles.priceValue}>₹{item.pricePerKg.toFixed(2)}</Text>
+            <Text style={styles.priceValue}>₹{Math.round(item.pricePerKg)}</Text>
           </View>
         </View>
         
@@ -284,11 +284,11 @@ export default function AddItemsScreen() {
           <>
             <View style={styles.bagsRow}>
               <Text style={styles.bagsLabel}>Equivalent Bags:</Text>
-              <Text style={styles.bagsValue}>{(item.weightKg / 30).toFixed(2)} bags</Text>
+              <Text style={styles.bagsValue}>{Math.round(item.weightKg / 30)} bags</Text>
             </View>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total:</Text>
-              <Text style={styles.totalValue}>₹{item.totalPrice.toFixed(2)}</Text>
+              <Text style={styles.totalValue}>₹{Math.round(item.totalPrice)}</Text>
             </View>
           </>
         )}
@@ -383,7 +383,7 @@ export default function AddItemsScreen() {
         <View style={styles.footer}>
           <View style={styles.totalContainer}>
             <Text style={styles.footerTotalLabel}>Total Amount:</Text>
-            <Text style={styles.totalAmount}>₹{totalAmount.toFixed(2)}</Text>
+            <Text style={styles.totalAmount}>₹{Math.round(totalAmount)}</Text>
           </View>
           <TouchableOpacity style={styles.addProductsButton} onPress={addItemsToBill}>
             <Ionicons name="add-circle" size={24} color={Colors.text} />

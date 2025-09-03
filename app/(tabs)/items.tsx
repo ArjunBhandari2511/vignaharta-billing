@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
+import { StockManager } from '../../utils/stockManager';
 
 // Android-specific utilities
 const isAndroid = Platform.OS === 'android';
@@ -48,6 +49,7 @@ interface Item {
   lowStockAlert: number; // in bags
   createdAt: string;
   updatedAt: string;
+  isUniversal?: boolean; // Flag to identify universal items like Bardana
 }
 
 export default function ItemsScreen() {
@@ -82,6 +84,8 @@ export default function ItemsScreen() {
 
   useEffect(() => {
     loadItems();
+    // Initialize Bardana universal item
+    StockManager.initializeBardana();
   }, []);
 
   useEffect(() => {
@@ -261,6 +265,17 @@ export default function ItemsScreen() {
   };
 
   const handleDeleteItem = async (itemId: string, itemName: string) => {
+    // Check if item is universal (cannot be deleted)
+    const itemToDelete = items.find(item => item.id === itemId);
+    if (itemToDelete?.isUniversal) {
+      Alert.alert(
+        'Cannot Delete Universal Item',
+        `${itemName} is a universal item and cannot be deleted. You can only edit its properties.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     Alert.alert(
       'Delete Product',
       `Are you sure you want to delete "${itemName}"? This action cannot be undone.`,
@@ -315,6 +330,14 @@ export default function ItemsScreen() {
         </View>
         
         <View style={styles.itemActions}>
+          {/* Universal Item Indicator */}
+          {item.isUniversal && (
+            <View style={styles.universalBadge}>
+              <Ionicons name="shield-checkmark" size={14} color={Colors.primary} />
+              <Text style={styles.universalText}>Universal</Text>
+            </View>
+          )}
+          
           <TouchableOpacity
             style={styles.editIcon}
             onPress={(e) => {
@@ -324,15 +347,19 @@ export default function ItemsScreen() {
           >
             <Ionicons name="pencil-outline" size={16} color={Colors.primary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.deleteIcon}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleDeleteItem(item.id, item.productName);
-            }}
-          >
-            <Ionicons name="trash-outline" size={16} color={Colors.error} />
-          </TouchableOpacity>
+          
+          {/* Only show delete button for non-universal items */}
+          {!item.isUniversal && (
+            <TouchableOpacity
+              style={styles.deleteIcon}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleDeleteItem(item.id, item.productName);
+              }}
+            >
+              <Ionicons name="trash-outline" size={16} color={Colors.error} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -350,7 +377,7 @@ export default function ItemsScreen() {
               styles.stockValue,
               item.openingStock <= item.lowStockAlert && styles.lowStockText
             ]}>
-              {item.openingStock.toFixed(1)} bags
+              {Math.round(item.openingStock)} bags
             </Text>
             <Text style={styles.stockUnit}>({Math.round(item.openingStock * 30)} kg)</Text>
           </View>
@@ -376,7 +403,7 @@ export default function ItemsScreen() {
             styles.quickDetailValue,
             { color: item.openingStock <= item.lowStockAlert ? Colors.error : Colors.textSecondary }
           ]}>
-            {item.lowStockAlert.toFixed(1)} bags
+            {Math.round(item.lowStockAlert)} bags
           </Text>
         </View>
       </View>
@@ -628,7 +655,7 @@ export default function ItemsScreen() {
               onPress={() => {
                 const lowStockItems = getLowStockItems();
                 const itemNames = lowStockItems.map(item => 
-                  `• ${item.productName}: ${item.openingStock.toFixed(2)} bags (${Math.round(item.openingStock * 30)} kg)`
+                  `• ${item.productName}: ${Math.round(item.openingStock)} bags (${Math.round(item.openingStock * 30)} kg)`
                 ).join('\n');
                 Alert.alert(
                   'Low Stock Items',
@@ -1267,6 +1294,21 @@ const styles = StyleSheet.create({
       fontSize: 16,
       fontWeight: '500',
       color: Colors.textSecondary,
+    },
+    universalBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: Colors.primary + '15',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      marginRight: 8,
+    },
+    universalText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: Colors.primary,
+      marginLeft: 4,
     },
 
   });

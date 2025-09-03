@@ -19,11 +19,11 @@ import {
     View,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
-import { CloudinaryUploader } from '../../utils/cloudinaryUpload';
 import { BasePdfGenerator } from '../../utils/basePdfGenerator';
-import { Storage, STORAGE_KEYS } from '../../utils/storage';
 import { Party, PartyManager } from '../../utils/partyManager';
-import { WASenderAPI } from '../../utils/wasenderApi';
+import { StockManager } from '../../utils/stockManager';
+import { Storage, STORAGE_KEYS } from '../../utils/storage';
+import { DocumentService } from '../../utils/documentService';
 
 // Android-specific utilities
 const isAndroid = Platform.OS === 'android';
@@ -297,6 +297,9 @@ export default function PurchaseScreen() {
     try {
       await Storage.setObject(STORAGE_KEYS.PURCHASE_BILLS, updatedBills);
       
+      // Update stock levels when items are purchased
+      await StockManager.updateStockOnPurchase(newBill.items);
+      
       // Trigger balance recalculation
       await Storage.setObject('LAST_TRANSACTION_UPDATE', Date.now().toString());
       
@@ -313,18 +316,18 @@ export default function PurchaseScreen() {
   const sendBillViaWhatsApp = async (bill: PurchaseBill, pdfUri?: string) => {
     try {
       // Validate phone number
-      if (!WASenderAPI.validatePhoneNumber(bill.phoneNumber)) {
+      if (!DocumentService.validatePhoneNumber(bill.phoneNumber)) {
         console.warn('Invalid phone number format:', bill.phoneNumber);
         return;
       }
 
-      const formattedPhone = WASenderAPI.formatPhoneNumber(bill.phoneNumber);
+      const formattedPhone = DocumentService.formatPhoneNumber(bill.phoneNumber);
       
       let documentUrl: string | undefined;
       
       // Upload PDF to Cloudinary if available
       if (pdfUri) {
-        const uploadResult = await CloudinaryUploader.uploadPurchaseBillPdf(pdfUri, bill.billNo);
+        const uploadResult = await DocumentService.uploadPurchaseBillPdf(pdfUri, bill.billNo);
         
         if (uploadResult.success && uploadResult.url) {
           documentUrl = uploadResult.url;
@@ -334,7 +337,7 @@ export default function PurchaseScreen() {
       }
       
       // Send bill via WhatsApp (with document if available)
-      const response = await WASenderAPI.sendPurchaseBill(
+      const response = await DocumentService.sendPurchaseBill(
         formattedPhone,
         bill.supplierName,
         bill.billNo,

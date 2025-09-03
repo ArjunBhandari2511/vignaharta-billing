@@ -11,6 +11,7 @@ interface Item {
   lowStockAlert: number; // in bags
   createdAt: string;
   updatedAt: string;
+  isUniversal?: boolean; // Flag to identify universal items like Bardana
 }
 
 interface SaleItem {
@@ -22,6 +23,62 @@ interface SaleItem {
 }
 
 export class StockManager {
+  /**
+   * Initialize the universal Bardana item if it doesn't exist
+   */
+  static async initializeBardana(): Promise<void> {
+    try {
+      const items = await Storage.getObject<Item[]>(STORAGE_KEYS.ITEMS);
+      if (!items) {
+        // Create initial items array with Bardana
+        const bardanaItem: Item = {
+          id: 'bardana-universal',
+          productName: 'Bardana',
+          category: 'Primary',
+          purchasePrice: 0,
+          salePrice: 0,
+          openingStock: 0,
+          asOfDate: new Date().toISOString().split('T')[0],
+          lowStockAlert: 10,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isUniversal: true,
+        };
+        
+        await Storage.setObject(STORAGE_KEYS.ITEMS, [bardanaItem]);
+        console.log('Bardana universal item created successfully');
+        return;
+      }
+
+      // Check if Bardana already exists
+      const bardanaExists = items.some(item => item.isUniversal && item.productName === 'Bardana');
+      
+      if (!bardanaExists) {
+        const bardanaItem: Item = {
+          id: 'bardana-universal',
+          productName: 'Bardana',
+          category: 'Primary',
+          purchasePrice: 0,
+          salePrice: 0,
+          openingStock: 0,
+          asOfDate: new Date().toISOString().split('T')[0],
+          lowStockAlert: 10,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isUniversal: true,
+        };
+        
+        items.push(bardanaItem);
+        await Storage.setObject(STORAGE_KEYS.ITEMS, items);
+        console.log('Bardana universal item added to existing items');
+      } else {
+        console.log('Bardana universal item already exists');
+      }
+    } catch (error) {
+      console.error('Error initializing Bardana:', error);
+    }
+  }
+
   /**
    * Update stock levels when items are sold
    * @param soldItems Array of items that were sold
@@ -41,19 +98,43 @@ export class StockManager {
         soldItemsMap.set(item.itemName, currentQty + item.quantity);
       });
 
+      // Calculate total Bardana reduction needed
+      let totalBardanaReduction = 0;
+      soldItems.forEach(item => {
+        // For each kg of item sold, reduce 1 kg of Bardana
+        totalBardanaReduction += item.quantity;
+      });
+      
+      console.log(`Total Bardana reduction needed: ${totalBardanaReduction} kg`);
+
       // Update stock for each item
       const updatedItems = items.map(item => {
-        const soldQuantity = soldItemsMap.get(item.productName);
-        if (soldQuantity) {
-          // Convert kg to bags (1 bag = 30 kg)
-          const soldBags = soldQuantity / 30;
-          const newStock = Math.max(0, item.openingStock - soldBags);
+        if (item.isUniversal && item.productName === 'Bardana') {
+          // Reduce Bardana stock based on total items sold
+          const bardanaReductionBags = totalBardanaReduction / 30; // Convert kg to bags
+          const newStock = Math.max(0, Math.round((item.openingStock - bardanaReductionBags) * 100) / 100);
+          
+          console.log(`Bardana stock reduced from ${Math.round(item.openingStock * 100) / 100} bags to ${newStock} bags (${totalBardanaReduction} kg reduction)`);
           
           return {
             ...item,
             openingStock: newStock,
             updatedAt: new Date().toISOString(),
           };
+        } else {
+          // Handle regular items
+          const soldQuantity = soldItemsMap.get(item.productName);
+          if (soldQuantity) {
+            // Convert kg to bags (1 bag = 30 kg)
+            const soldBags = soldQuantity / 30;
+            const newStock = Math.max(0, Math.round((item.openingStock - soldBags) * 100) / 100);
+            
+            return {
+              ...item,
+              openingStock: newStock,
+              updatedAt: new Date().toISOString(),
+            };
+          }
         }
         return item;
       });
@@ -83,19 +164,39 @@ export class StockManager {
         purchasedItemsMap.set(item.itemName, currentQty + item.quantity);
       });
 
+      // Calculate total Bardana addition needed
+      let totalBardanaAddition = 0;
+      purchasedItems.forEach(item => {
+        // For each kg of item purchased, add 1 kg of Bardana
+        totalBardanaAddition += item.quantity;
+      });
+
       // Update stock for each item
       const updatedItems = items.map(item => {
-        const purchasedQuantity = purchasedItemsMap.get(item.productName);
-        if (purchasedQuantity) {
-          // Convert kg to bags (1 bag = 30 kg)
-          const purchasedBags = purchasedQuantity / 30;
-          const newStock = item.openingStock + purchasedBags;
+        if (item.isUniversal && item.productName === 'Bardana') {
+          // Add Bardana stock based on total items purchased
+          const bardanaAdditionBags = totalBardanaAddition / 30; // Convert kg to bags
+          const newStock = Math.round((item.openingStock + bardanaAdditionBags) * 100) / 100;
           
           return {
             ...item,
             openingStock: newStock,
             updatedAt: new Date().toISOString(),
           };
+        } else {
+          // Handle regular items
+          const purchasedQuantity = purchasedItemsMap.get(item.productName);
+          if (purchasedQuantity) {
+            // Convert kg to bags (1 bag = 30 kg)
+            const purchasedBags = purchasedQuantity / 30;
+            const newStock = Math.round((item.openingStock + purchasedBags) * 100) / 100;
+            
+            return {
+              ...item,
+              openingStock: newStock,
+              updatedAt: new Date().toISOString(),
+            };
+          }
         }
         return item;
       });
@@ -125,19 +226,39 @@ export class StockManager {
         soldItemsMap.set(item.itemName, currentQty + item.quantity);
       });
 
+      // Calculate total Bardana restoration needed
+      let totalBardanaRestoration = 0;
+      soldItems.forEach(item => {
+        // For each kg of item restored, restore 1 kg of Bardana
+        totalBardanaRestoration += item.quantity;
+      });
+
       // Revert stock for each item (add back the sold quantity)
       const updatedItems = items.map(item => {
-        const soldQuantity = soldItemsMap.get(item.productName);
-        if (soldQuantity) {
-          // Convert kg to bags (1 bag = 30 kg)
-          const soldBags = soldQuantity / 30;
-          const newStock = item.openingStock + soldBags;
+        if (item.isUniversal && item.productName === 'Bardana') {
+          // Restore Bardana stock based on total items restored
+          const bardanaRestorationBags = totalBardanaRestoration / 30; // Convert kg to bags
+          const newStock = Math.round((item.openingStock + bardanaRestorationBags) * 100) / 100;
           
           return {
             ...item,
             openingStock: newStock,
             updatedAt: new Date().toISOString(),
           };
+        } else {
+          // Handle regular items
+          const soldQuantity = soldItemsMap.get(item.productName);
+          if (soldQuantity) {
+            // Convert kg to bags (1 bag = 30 kg)
+            const soldBags = soldQuantity / 30;
+            const newStock = Math.round((item.openingStock + soldBags) * 100) / 100;
+            
+            return {
+              ...item,
+              openingStock: newStock,
+              updatedAt: new Date().toISOString(),
+            };
+          }
         }
         return item;
       });
@@ -164,7 +285,7 @@ export class StockManager {
       if (!item) return 0;
 
       // Convert bags to kg (1 bag = 30 kg)
-      return item.openingStock * 30;
+      return Math.round(item.openingStock * 30);
     } catch (error) {
       console.error('Error getting item stock:', error);
       return 0;

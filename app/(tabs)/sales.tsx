@@ -20,10 +20,10 @@ import {
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { BasePdfGenerator } from '../../utils/basePdfGenerator';
-import { CloudinaryUploader } from '../../utils/cloudinaryUpload';
+import { DocumentService } from '../../utils/documentService';
 import { Party, PartyManager } from '../../utils/partyManager';
+import { StockManager } from '../../utils/stockManager';
 import { Storage, STORAGE_KEYS } from '../../utils/storage';
-import { WASenderAPI } from '../../utils/wasenderApi';
 
 // Android-specific utilities
 const isAndroid = Platform.OS === 'android';
@@ -294,6 +294,9 @@ export default function SalesScreen() {
     try {
       await Storage.setObject(STORAGE_KEYS.SALES_INVOICES, updatedInvoices);
       
+      // Update stock levels when items are sold
+      await StockManager.updateStockOnSale(newInvoice.items);
+      
       // Trigger balance recalculation
       await Storage.setObject('LAST_TRANSACTION_UPDATE', Date.now().toString());
       
@@ -310,18 +313,18 @@ export default function SalesScreen() {
   const sendInvoiceViaWhatsApp = async (invoice: SaleInvoice, pdfUri?: string) => {
     try {
       // Validate phone number
-      if (!WASenderAPI.validatePhoneNumber(invoice.phoneNumber)) {
+      if (!DocumentService.validatePhoneNumber(invoice.phoneNumber)) {
         console.warn('Invalid phone number format:', invoice.phoneNumber);
         return;
       }
 
-      const formattedPhone = WASenderAPI.formatPhoneNumber(invoice.phoneNumber);
+      const formattedPhone = DocumentService.formatPhoneNumber(invoice.phoneNumber);
       
       let documentUrl: string | undefined;
       
       // Upload PDF to Cloudinary if available
       if (pdfUri) {
-        const uploadResult = await CloudinaryUploader.uploadInvoicePdf(pdfUri, invoice.invoiceNo);
+        const uploadResult = await DocumentService.uploadInvoicePdf(pdfUri, invoice.invoiceNo);
         
         if (uploadResult.success && uploadResult.url) {
           documentUrl = uploadResult.url;
@@ -331,7 +334,7 @@ export default function SalesScreen() {
       }
       
       // Send invoice via WhatsApp (with document if available)
-      const response = await WASenderAPI.sendInvoice(
+      const response = await DocumentService.sendInvoice(
         formattedPhone,
         invoice.customerName,
         invoice.invoiceNo,
